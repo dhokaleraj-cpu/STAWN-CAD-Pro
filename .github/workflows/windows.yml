@@ -8,6 +8,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write  # the screenshots branch
+
 jobs:
   windows:
     strategy:
@@ -65,8 +68,9 @@ jobs:
             Write-Host "StawnCADPro.exe $demo was still running after 20 s without errors"
           }
 
-      # Screenshots of the sample part and of sketch mode, printed into the log as base64 so
-      # the look can be checked without downloading anything, and uploaded as an artifact.
+      # Screenshots of the sample part and of sketch mode, uploaded as an artifact and pushed to
+      # the ci-screenshots branch (screenshots/<arch>/ of the latest main build), so the look can
+      # be checked with a plain git fetch.
       - name: Screenshots
         if: always() && matrix.arch == 'x64' && hashFiles('build-windows/app/StawnCADPro.exe') != ''
         shell: powershell
@@ -84,11 +88,21 @@ jobs:
             $bmp.Save($file, [System.Drawing.Imaging.ImageFormat]::Png)
             $g.Dispose(); $bmp.Dispose()
             if (-not $p.HasExited) { Stop-Process $p }
-            Write-Host "SCREENSHOT-BEGIN $demo $($screen.Width)x$($screen.Height)"
-            $b64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($file))
-            for ($i = 0; $i -lt $b64.Length; $i += 8000) { Write-Host $b64.Substring($i, [Math]::Min(8000, $b64.Length - $i)) }
-            Write-Host "SCREENSHOT-END $demo"
           }
+
+      - name: Push screenshots to the ci-screenshots branch
+        if: always() && matrix.arch == 'x64' && github.ref == 'refs/heads/main' && hashFiles('screenshots/*.png') != ''
+        shell: pwsh
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git worktree add --orphan -b ci-screenshots-tmp $env:RUNNER_TEMP\shots
+          Copy-Item screenshots\*.png $env:RUNNER_TEMP\shots\
+          Push-Location $env:RUNNER_TEMP\shots
+          git add -A
+          git commit -q -m "Screenshots of ${{ github.sha }}"
+          git push -f origin HEAD:ci-screenshots
+          Pop-Location
 
       - uses: actions/upload-artifact@v4
         if: always() && matrix.arch == 'x64' && hashFiles('build-windows/app/StawnCADPro.exe') != ''
