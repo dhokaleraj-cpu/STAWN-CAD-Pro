@@ -123,7 +123,7 @@ struct CustomPropertiesPane: View {
                     }
                     .onAppear { ensureDefault(c) }
                 } else {
-                    CommitField(value: model.properties[c.key] ?? "") { set(c.key, $0) }
+                    CommitField(value: model.properties[c.key] ?? "", display: resolved) { set(c.key, $0) }
                         .onAppear { ensureDefault(c) }
                 }
             }
@@ -158,8 +158,11 @@ struct CustomPropertiesPane: View {
 }
 
 /// Text field that writes its value when editing ends instead of on every keystroke.
+/// While not being edited it shows the evaluated value (e.g. the part name for ${PartName});
+/// while focused it shows the stored text so links can be edited.
 struct CommitField: View {
     let value: String
+    var display: String? = nil
     let commit: (String) -> Void
     @State private var text = ""
     @FocusState private var focused: Bool
@@ -168,9 +171,17 @@ struct CommitField: View {
         TextField("", text: $text)
             .textFieldStyle(.roundedBorder)
             .focused($focused)
-            .onAppear { text = value }
-            .onChange(of: value) { _, v in if !focused { text = v } }
-            .onChange(of: focused) { _, f in if !f, text != value { commit(text) } }
+            .onAppear { text = display ?? value }
+            .onChange(of: value) { _, v in if !focused { text = display ?? v } }
+            .onChange(of: display) { _, d in if !focused { text = d ?? value } }
+            .onChange(of: focused) { _, f in
+                if f {
+                    text = value
+                } else {
+                    if text != value { commit(text) }
+                    text = display ?? text
+                }
+            }
             .onSubmit { if text != value { commit(text) } }
     }
 }

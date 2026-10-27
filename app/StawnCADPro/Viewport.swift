@@ -77,6 +77,8 @@ struct Viewport: NSViewRepresentable {
         var lastCommand: UUID?
         var meshNode = SCNNode()
         var hasFramed = false
+        var framedBounds: (min: SIMD3<Float>, max: SIMD3<Float>)?
+        var currentView = StandardView.isometric
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -124,14 +126,24 @@ struct Viewport: NSViewRepresentable {
             if style != .wireframe { c.meshNode.addChildNode(faceNode(mesh)) }
             if style != .shaded { c.meshNode.addChildNode(edgeNode(mesh)) }
         }
-        if !c.hasFramed, mesh != nil {
-            c.hasFramed = true
-            frame(view, mesh: mesh, standard: .isometric)
-        }
         if let cmd = command, cmd.serial != c.lastCommand {
             c.lastCommand = cmd.serial
-            frame(view, mesh: mesh, standard: cmd.view ?? .isometric)
+            c.currentView = cmd.view ?? c.currentView
+            frame(view, mesh: mesh, standard: c.currentView)
+            c.framedBounds = mesh?.bounds
+        } else if let mesh, !c.hasFramed || boundsChanged(c.framedBounds, mesh.bounds) {
+            // Zoom to fit on first show and whenever a rebuild changes the part's size.
+            frame(view, mesh: mesh, standard: c.currentView)
+            c.framedBounds = mesh.bounds
         }
+        if mesh != nil { c.hasFramed = true }
+    }
+
+    private func boundsChanged(_ old: (min: SIMD3<Float>, max: SIMD3<Float>)?,
+                               _ new: (min: SIMD3<Float>, max: SIMD3<Float>)) -> Bool {
+        guard let old else { return true }
+        let size = max(simd_length(new.max - new.min), 1)
+        return simd_length(old.min - new.min) > 0.02 * size || simd_length(old.max - new.max) > 0.02 * size
     }
 
     private func frame(_ view: SCNView, mesh: MeshBuffers?, standard: StandardView) {

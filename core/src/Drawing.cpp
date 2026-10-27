@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 #include <fstream>
 #include <sstream>
 
@@ -137,11 +138,24 @@ void text(Sheet2D& s, double x, double y, double h, const std::string& t,
 }
 
 // Labelled title block cell: small label in the top left corner, value below it.
+std::string today() {
+    std::time_t t = std::time(nullptr);
+    char buf[16];
+    std::strftime(buf, sizeof buf, "%d-%m-%Y", std::localtime(&t));
+    return buf;
+}
+
 void cell(Sheet2D& s, double x, double y, double w, double h, const std::string& label, const std::string& value,
           double valueHeight = 3.5) {
     rect(s, x, y, w, h, Layer::Thin);
-    text(s, x + 1.2, y + h - 2.6, 1.8, label);
-    text(s, x + 1.5, y + 1.6, valueHeight, value);
+    text(s, x + 1.2, y + h - 2.2, 1.6, label);
+    // Keep the value below the label: the label's baseline sits 2.2 mm under the top edge.
+    double vh = label.empty() ? std::min(valueHeight, h - 3) : std::min(valueHeight, (h - 4.2) * 0.85);
+    double baseline = label.empty() ? y + (h - vh) / 2 : y + 1.3;
+    // Shrink long values so they fit the cell width (Helvetica averages about 0.52 em per character).
+    double width = 0.52 * vh * 1.4 * double(value.size());
+    if (width > w - 3) vh *= (w - 3) / width;
+    text(s, x + 1.5, baseline, vh, value);
 }
 
 void circle(Sheet2D& s, double cx, double cy, double r, Layer layer) {
@@ -220,8 +234,11 @@ void sheetFormat(Sheet2D& s, PartDocument& part, const DrawingSpec& spec) {
     std::string title = prop("Description").empty() ? part.name : prop("Description");
     cell(s, x0, y0 + 36, 180, 12, "TITLE", title, 5);
     cell(s, x0, y0 + 48, 90, 8, "", spec.companyName, 3);
-    cell(s, x0 + 90, y0 + 48, 45, 8, "DRAWN", spec.drawnBy, 2.5);
-    cell(s, x0 + 135, y0 + 48, 45, 8, "DATE", spec.date, 2.5);
+    std::string drawn = spec.drawnBy.empty() ? prop("DrawnBy") : spec.drawnBy;
+    std::string date = spec.date.empty() ? prop("ApprovalDate") : spec.date;
+    if (date.empty()) date = today();
+    cell(s, x0 + 90, y0 + 48, 45, 8, "DRAWN", drawn, 2.5);
+    cell(s, x0 + 135, y0 + 48, 45, 8, "DATE", date, 2.5);
 
     // Revision table, top right.
     const double rx = W - margin - 120, ry = H - margin - 12;

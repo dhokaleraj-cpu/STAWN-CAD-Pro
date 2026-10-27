@@ -90,6 +90,12 @@ struct PropertyManager: View {
         Form {
             if let f = model.selectedFeature {
                 Section(f) {
+                    if model.configurations.count > 1 {
+                        Picker("Apply changes to", selection: $thisConfigurationOnly) {
+                            Text("All configurations").tag(false)
+                            Text("This configuration (\(model.activeConfiguration))").tag(true)
+                        }
+                    }
                     let dims = model.dimensions(of: f)
                     if dims.isEmpty { Text("No dimensions").foregroundStyle(.secondary) }
                     ForEach(dims, id: \.name) { d in
@@ -97,7 +103,6 @@ struct PropertyManager: View {
                             model.setDimension(d.name, v, thisConfigurationOnly: thisConfigurationOnly)
                         }
                     }
-                    Toggle("This configuration only", isOn: $thisConfigurationOnly)
                     Toggle("Suppressed", isOn: Binding(get: { model.isSuppressed(f) },
                                                       set: { model.setSuppressed(f, $0) }))
                     if let e = model.errorFor(f) { Text(e).foregroundStyle(.red) }
