@@ -627,12 +627,12 @@ public sealed partial class MainWindow : Window
         {
             StartSketch("Front");
             SketchTool("rectangle");
-            View3D.SketchClick(10, 12);
-            View3D.SketchClick(40, 30);
+            View3D.SketchClick(15, -28);
+            View3D.SketchClick(45, -10);
             SketchTool("dimension");
-            View3D.SketchClick(25, 12);
+            View3D.SketchClick(30, -28);
             View3D.AddDimension(0, 30);
-            View3D.SketchClick(40, 21);
+            View3D.SketchClick(45, -19);
             SketchTool("line");
             View3D.SketchMove(55, 40);
         };

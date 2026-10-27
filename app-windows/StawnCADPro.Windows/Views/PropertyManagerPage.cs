@@ -47,7 +47,10 @@ public sealed class PropertyManagerPage : UserControl
         stack.Children.Add(buttons);
         stack.Children.Add(new Border { Child = _message, Padding = new Thickness(8, 0, 8, 4) });
         stack.Children.Add(_body);
-        Content = new ScrollViewer { Content = stack };
+        // An opaque page: it covers the FeatureManager tree while the command runs.
+        var page = new Grid { Background = new SolidColorBrush(Color.FromArgb(255, 247, 248, 250)) };
+        page.Children.Add(new ScrollViewer { Content = stack });
+        Content = page;
         KeyDown += (_, e) =>
         {
             if (e.Key == Windows.System.VirtualKey.Enter && ok != null) { ok(); e.Handled = true; }
