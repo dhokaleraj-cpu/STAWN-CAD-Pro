@@ -4,6 +4,7 @@ import SwiftUI
 struct FeatureTree: View {
     @ObservedObject var model: PartModel
     @Binding var managerTab: ManagerTab
+    var editSketch: (String) -> Void = { _ in }
     @State private var renaming: String?
     @State private var newName = ""
 
@@ -29,6 +30,9 @@ struct FeatureTree: View {
                 row(name: name, type: f["type"] as? String ?? "")
                     .tag(name)
                     .contextMenu {
+                        if f["type"] as? String == "Sketch" {
+                            Button("Edit Sketch") { editSketch(name) }
+                        }
                         Button("Edit Feature") {
                             model.selectedFeature = name
                             managerTab = .property
@@ -44,7 +48,11 @@ struct FeatureTree: View {
             }
         }
         .listStyle(.sidebar)
-        .onTapGesture(count: 2) { if model.selectedFeature != nil { managerTab = .property } }
+        .onTapGesture(count: 2) {
+            guard let name = model.selectedFeature else { return }
+            if model.features.first(where: { $0["name"] as? String == name })?["type"] as? String == "Sketch" { editSketch(name) }
+            else { managerTab = .property }
+        }
         .alert("Rename Feature", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Name", text: $newName)
             Button("OK") {

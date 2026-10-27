@@ -32,6 +32,8 @@ struct PartWindow: View {
     @State private var viewCommand: ViewCommand?
     @State private var displayStyle = DisplayStyle.shadedWithEdges
     @State private var alert: String?
+    @State private var sketch: SketchSession?
+    @State private var featureSheet: FeatureKind?
 
     var body: some View {
         Group {
@@ -51,7 +53,7 @@ struct PartWindow: View {
     private func content(_ model: PartModel) -> some View {
         VStack(spacing: 0) {
             CommandManager(tab: $commandTab, model: model, showDrawing: $showDrawing, managerTab: $managerTab,
-                           alert: $alert)
+                           alert: $alert, sketch: $sketch, featureSheet: $featureSheet)
             Divider()
             HSplitView {
                 VStack(spacing: 0) {
@@ -63,7 +65,12 @@ struct PartWindow: View {
                     .padding(6)
                     Divider()
                     switch managerTab {
-                    case .tree: FeatureTree(model: model, managerTab: $managerTab)
+                    case .tree:
+                        FeatureTree(model: model, managerTab: $managerTab) { name in
+                            sketch?.close()
+                            sketch = SketchSession.open(model, sketch: name)
+                            if sketch != nil { commandTab = .sketch }
+                        }
                     case .property: PropertyManager(model: model)
                     case .configurations: ConfigurationManager(model: model)
                     }
@@ -71,16 +78,27 @@ struct PartWindow: View {
                 .frame(minWidth: 230, idealWidth: 260, maxWidth: 400)
 
                 ZStack(alignment: .top) {
-                    Viewport(mesh: model.mesh, command: $viewCommand, style: displayStyle)
-                    HeadsUpToolbar(command: $viewCommand, style: $displayStyle)
-                        .padding(.top, 8)
-                    VStack {
-                        Spacer()
-                        HStack {
-                            Text("*\(viewCommand?.label ?? "Isometric")").font(.caption).foregroundStyle(.secondary)
+                    if let sketch {
+                        SketchCanvas(session: sketch)
+                        VStack {
                             Spacer()
+                            HStack {
+                                SketchPromptPanel(session: sketch)
+                                Spacer()
+                            }
                         }
-                        .padding(10)
+                    } else {
+                        Viewport(mesh: model.mesh, command: $viewCommand, style: displayStyle)
+                        HeadsUpToolbar(command: $viewCommand, style: $displayStyle)
+                            .padding(.top, 8)
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Text("*\(viewCommand?.label ?? "Isometric")").font(.caption).foregroundStyle(.secondary)
+                                Spacer()
+                            }
+                            .padding(10)
+                        }
                     }
                 }
                 .frame(minWidth: 500)
@@ -94,7 +112,93 @@ struct PartWindow: View {
             StatusBar(model: model, showTaskPane: $showTaskPane)
         }
         .sheet(isPresented: $showDrawing) { DrawingSheet(model: model) }
+        .sheet(item: $featureSheet) { kind in
+            FeatureSheet(kind: kind, sketchName: featureSketch(model) ?? "") { params in
+                featureSheet = nil
+                guard var params, let name = featureSketch(model) else { return }
+                sketch?.close()
+                sketch = nil
+                params["sketch"] = name
+                let reply = model.command(params)
+                model.commitCommands()
+                if reply["ok"] as? Bool != true { alert = reply["error"] as? String ?? "The feature failed" }
+                else if reply["rebuild_ok"] as? Bool == false {
+                    alert = (reply["rebuild_errors"] as? [String] ?? []).joined(separator: "\n")
+                }
+            }
+        }
         .navigationTitle(model.name + " [" + model.activeConfiguration + "]")
+    }
+}
+
+/// The sketch a feature uses: the open one, else the selected one, else the last one.
+private func featureSketch(_ model: PartModel) -> String? {
+    let sketches = model.features.filter { $0["type"] as? String == "Sketch" }.compactMap { $0["name"] as? String }
+    if let s = model.selectedFeature, sketches.contains(s) { return s }
+    return sketches.last
+}
+
+enum FeatureKind: String, Identifiable {
+    case extrude = "Boss-Extrude", cutExtrude = "Cut-Extrude", revolve = "Revolve", cutRevolve = "Cut-Revolve"
+    var id: String { rawValue }
+    var op: String {
+        switch self {
+        case .extrude: return "extrude"
+        case .cutExtrude: return "cut_extrude"
+        case .revolve: return "revolve"
+        case .cutRevolve: return "cut_revolve"
+        }
+    }
+    var isRevolve: Bool { self == .revolve || self == .cutRevolve }
+}
+
+/// Extrude and Revolve PropertyManagers: Blind or Mid Plane depth, or the revolve angle.
+struct FeatureSheet: View {
+    let kind: FeatureKind
+    let sketchName: String
+    let done: ([String: Any]?) -> Void
+    @State private var depth = 10.0
+    @State private var midPlane = false
+    @State private var reverse = false
+    @State private var angle = 360.0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(kind.rawValue).font(.headline)
+            Text("Sketch: \(sketchName.isEmpty ? "none: draw a sketch first" : sketchName)").font(.callout)
+            if kind.isRevolve {
+                Text("Axis of revolution: the sketch's first centerline").font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Text("Angle")
+                    TextField("", value: $angle, format: .number).frame(width: 90)
+                    Text("°")
+                }
+            } else {
+                Picker("End Condition", selection: $midPlane) {
+                    Text("Blind").tag(false)
+                    Text("Mid Plane").tag(true)
+                }
+                .pickerStyle(.radioGroup)
+                HStack {
+                    Text("Depth")
+                    TextField("", value: $depth, format: .number).frame(width: 90)
+                    Text("mm")
+                }
+                Toggle("Reverse Direction", isOn: $reverse)
+            }
+            HStack {
+                Spacer()
+                Button("Cancel") { done(nil) }.keyboardShortcut(.cancelAction)
+                Button("OK") {
+                    done(kind.isRevolve ? ["op": kind.op, "angle": angle]
+                                        : ["op": kind.op, "depth": depth, "mid_plane": midPlane, "reverse": reverse])
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(sketchName.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 320)
     }
 }
 
@@ -121,6 +225,8 @@ struct CommandManager: View {
     @Binding var showDrawing: Bool
     @Binding var managerTab: ManagerTab
     @Binding var alert: String?
+    @Binding var sketch: SketchSession?
+    @Binding var featureSheet: FeatureKind?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -129,20 +235,45 @@ struct CommandManager: View {
                 case .features:
                     tool("Rebuild", "arrow.clockwise") { model.refresh() }
                     Divider().frame(height: 40)
-                    tool("Revolve", "rotate.3d") { notYet("Revolve") }
-                    tool("Extrude", "square.stack.3d.up.fill") { notYet("Extrude") }
-                    tool("Cut", "scissors") { notYet("Cut") }
+                    tool("Extrude", "square.stack.3d.up.fill") { featureSheet = .extrude }
+                    tool("Revolve", "rotate.3d") { featureSheet = .revolve }
+                    tool("Extruded Cut", "scissors") { featureSheet = .cutExtrude }
+                    tool("Revolved Cut", "scissors.circle") { featureSheet = .cutRevolve }
                     tool("Fillet", "circle.bottomhalf.filled") { notYet("Fillet") }
                     tool("Chamfer", "triangle") { notYet("Chamfer") }
                     Divider().frame(height: 40)
                     tool("Configurations", "square.stack.3d.up") { managerTab = .configurations }
                 case .sketch:
-                    tool("Sketch", "pencil.and.outline") { notYet("Sketch") }
-                    tool("Smart Dimension", "ruler") { managerTab = .property }
-                    tool("Line", "line.diagonal") { notYet("Line") }
-                    tool("Circle", "circle") { notYet("Circle") }
-                    tool("Arc", "rotate.right") { notYet("Arc") }
-                    tool("Centerline", "line.3.horizontal.decrease") { notYet("Centerline") }
+                    Menu {
+                        ForEach(["Front", "Top", "Right"], id: \.self) { plane in
+                            Button("\(plane) Plane") {
+                                sketch?.close()
+                                sketch = SketchSession.open(model, plane: plane)
+                            }
+                        }
+                    } label: {
+                        VStack(spacing: 3) {
+                            Image(systemName: "pencil.and.outline").font(.system(size: 18))
+                            Text("Sketch").font(.caption2)
+                        }
+                        .frame(minWidth: 62, minHeight: 42)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    tool("Exit Sketch", "arrow.uturn.backward.square") {
+                        sketch?.close()
+                        sketch = nil
+                    }
+                    .disabled(sketch == nil)
+                    Divider().frame(height: 40)
+                    sketchTool("Select", "cursorarrow", "select")
+                    sketchTool("Line", "line.diagonal", "line")
+                    sketchTool("Centerline", "line.3.horizontal.decrease", "centerline")
+                    sketchTool("Rectangle", "rectangle", "rectangle")
+                    sketchTool("Circle", "circle", "circle")
+                    sketchTool("Arc", "rotate.right", "arc")
+                    sketchTool("Smart Dimension", "ruler", "dimension")
                 case .evaluate:
                     tool("Mass Properties", "scalemass") { managerTab = .property }
                     tool("Import STEP", "square.and.arrow.down") { importSTEP() }
@@ -182,7 +313,14 @@ struct CommandManager: View {
     }
 
     private func notYet(_ name: String) {
-        alert = "\(name) editing in the app arrives with the interactive sketcher. The feature already works in the model core and in parts opened from file."
+        alert = "\(name) in the app arrives with its PropertyManager. It already works in the Windows app and through the command API (stawn-cli)."
+    }
+
+    private func sketchTool(_ title: String, _ icon: String, _ tool: String) -> some View {
+        self.tool(title, icon) {
+            if let sketch { sketch.setTool(tool) }
+            else { alert = "Start a sketch first: Sketch > Front, Top or Right Plane, or double-click a sketch in the feature tree." }
+        }
     }
 
     private func importSTEP() {

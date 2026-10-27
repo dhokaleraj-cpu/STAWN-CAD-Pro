@@ -220,6 +220,22 @@ final class PartModel: ObservableObject {
         return list.map { ($0["name"] as? String ?? "", $0["density"] as? Double ?? 0) }
     }
 
+    // MARK: - Commands
+
+    /// Runs one command from the command API (docs/COMMANDS.md) without rebuilding, for the many
+    /// small steps of interactive sketching. Call `commitSketch()` when the sketch closes.
+    @discardableResult
+    func command(_ command: [String: Any]) -> [String: Any] {
+        guard let data = try? JSONSerialization.data(withJSONObject: command),
+              let text = String(data: data, encoding: .utf8),
+              let reply = stawn_doc_execute(handle, text) else { return [:] }
+        defer { stawn_free_string(reply) }
+        return (try? JSONSerialization.jsonObject(with: Data(String(cString: reply).utf8))) as? [String: Any] ?? [:]
+    }
+
+    /// Rebuilds after commands changed the part and saves the change into the document.
+    func commitCommands() { rebuildAndNotify() }
+
     // MARK: - Internals
 
     private func edit(_ change: (inout [String: Any]) -> Void) {
