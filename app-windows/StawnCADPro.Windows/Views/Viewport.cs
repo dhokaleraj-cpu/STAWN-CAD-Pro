@@ -327,6 +327,9 @@ public sealed class Viewport : UserControl
             for (int t = 0; t < m.Indices.Length / 3; t++)
             {
                 var a = view[m.Indices[3 * t]]; var b = view[m.Indices[3 * t + 1]]; var c = view[m.Indices[3 * t + 2]];
+                // Back faces are hidden by the front ones anyway; drawing them leaves dark slivers
+                // around the silhouette. Triangles wind anticlockwise about the outward normal.
+                if ((b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X) < 0) continue;
                 items.Add(((a.Z + b.Z + c.Z) / 3, t, false));
             }
         float bias = (m.Max - m.Min).Length() * 0.004f;

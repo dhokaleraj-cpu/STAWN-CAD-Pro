@@ -127,8 +127,10 @@ public sealed partial class MainWindow : Window
     {
         foreach (var item in new MenuFlyoutItemBase[] { SaveItem, SaveAsItem, ImportItem, ExportItem }) item.IsEnabled = on;
         CommandManager.IsEnabled = on;
-        PropertiesPane.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
-        TaskPaneColumn.Width = on ? new GridLength(300) : new GridLength(0);
+        // The Task Pane starts folded away, leaving the graphics area wide; its tabs open it.
+        PropertiesPane.Visibility = Visibility.Collapsed;
+        TaskPaneColumn.Width = new GridLength(0);
+        TaskTabs.IsHitTestVisible = on;
     }
 
     // ---------------------------------------------------------------- Toolbars
@@ -617,10 +619,11 @@ public sealed partial class MainWindow : Window
     {
         (AppWindow.Presenter as Microsoft.UI.Windowing.OverlappedPresenter)?.Maximize();
         if (what != "sketch") return;
-        var timer = DispatcherQueue.CreateTimer();
-        timer.Interval = TimeSpan.FromSeconds(3);
-        timer.IsRepeating = false;
-        timer.Tick += (_, _) =>
+        // Kept in a field: a timer nobody references can be collected before it fires.
+        _demoTimer = DispatcherQueue.CreateTimer();
+        _demoTimer.Interval = TimeSpan.FromSeconds(3);
+        _demoTimer.IsRepeating = false;
+        _demoTimer.Tick += (_, _) =>
         {
             StartSketch("Front");
             SketchTool("rectangle");
@@ -633,8 +636,10 @@ public sealed partial class MainWindow : Window
             SketchTool("line");
             View3D.SketchMove(55, 40);
         };
-        timer.Start();
+        _demoTimer.Start();
     }
+
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _demoTimer;
 
     // ---------------------------------------------------------------- Menus
 

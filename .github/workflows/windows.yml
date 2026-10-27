@@ -87,8 +87,10 @@ jobs:
             $file = "screenshots\$demo.png"
             $bmp.Save($file, [System.Drawing.Imaging.ImageFormat]::Png)
             $g.Dispose(); $bmp.Dispose()
-            if (-not $p.HasExited) { Stop-Process $p }
+            if (-not $p.HasExited) { Stop-Process $p; $p.WaitForExit() }
           }
+          $log = "$env:LOCALAPPDATA\STAWN CAD Pro\crash.log"
+          if (Test-Path $log) { Get-Content $log }
 
       - name: Push screenshots to the ci-screenshots branch
         if: always() && matrix.arch == 'x64' && github.ref == 'refs/heads/main' && hashFiles('screenshots/*.png') != ''
