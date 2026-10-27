@@ -42,6 +42,17 @@ public partial class App : Application
             return;
         }
 
+        // --demo part | --demo sketch: opens the sample maximised (and sketches on it), for CI screenshots.
+        var cli = Environment.GetCommandLineArgs();
+        int demo = Array.IndexOf(cli, "--demo");
+        if (demo > 0)
+        {
+            var window = new MainWindow(PartModel.SampleShaft());
+            window.Activate();
+            window.RunDemo(demo + 1 < cli.Length ? cli[demo + 1] : "part");
+            return;
+        }
+
         var path = Environment.GetCommandLineArgs().Skip(1).FirstOrDefault(a => a.EndsWith(".stprt", StringComparison.OrdinalIgnoreCase));
         if (path != null)
         {

@@ -1,42 +1,56 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Stawn.Model;
 using Stawn.Views;
+using Windows.Foundation;
 using Windows.Storage.Pickers;
 
 namespace Stawn;
 
 /// <summary>
-/// Part window: menu, CommandManager, manager pane on the left, graphics area, custom
-/// properties task pane and status bar. Mirrors PartWindow.swift on the Mac.
+/// Part window: menus and quick-access buttons, CommandManager, FeatureManager / PropertyManager
+/// pane, graphics area with the heads-up toolbar and confirmation corner, task pane and status
+/// bar. Commands that need options open a PropertyManager page in the left pane with OK and
+/// Cancel; sketches are drawn on their plane inside the graphics area.
 /// </summary>
 public sealed partial class MainWindow : Window
 {
     private PartModel? _model;
+    private Button? _exitSketchButton;
+    private string _tool = "select";
 
     public MainWindow(PartModel? model)
     {
         InitializeComponent();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(1500, 920));
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(1600, 960));
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "StawnCADPro.ico"));
+        BuildQuickAccess();
         BuildCommandManager();
+        BuildManagerTabs();
         BuildViewMenus();
+        BuildTaskTabs();
+        BuildModifyBox();
         Welcome.NewPart += () => Load(PartModel.Empty());
         Welcome.OpenSample += () => Load(PartModel.SampleShaft());
         Welcome.OpenPart += () => _ = OpenAsync();
         FeatureTreePanel.EditFeature += name =>
         {
             if (_model?.FeatureList.FirstOrDefault(f => f.Name == name).Type == "Sketch") EditSketch(name);
-            else ManagerTabs.SelectedItem = PropertyTab;
+            else ShowManager(PropertyPanel);
         };
-        SketchView.EditorChanged += OnSketchEditorChanged;
+        FeatureTreePanel.SketchOnPlane += StartSketch;
+        View3D.SketchChanged += OnSketchChanged;
+        View3D.ViewNameChanged += name => ViewNameText.Text = "*" + name;
         Closed += (_, _) => _model?.Dispose();
         if (model != null) Load(model); else ShowWelcome();
     }
@@ -45,14 +59,15 @@ public sealed partial class MainWindow : Window
     {
         Welcome.Visibility = Visibility.Visible;
         SetDocumentCommandsEnabled(false);
-        TitleText.Text = "STAWN CAD Pro";
-        StatusLeft.Text = "";
-        StatusRight.Text = "";
+        TitleText.Text = "";
+        StatusLeft.Text = "STAWN CAD Pro";
+        StatusEditing.Text = StatusMass.Text = StatusDefinition.Text = StatusCoordinates.Text = "";
     }
 
     private void Load(PartModel model)
     {
         LeaveSketchMode();
+        ClosePage();
         _model?.Dispose();
         _model = model;
         Welcome.Visibility = Visibility.Collapsed;
@@ -69,19 +84,43 @@ public sealed partial class MainWindow : Window
 
     private void OnModelChanged()
     {
-        if (_model == null || InSketch) return;
+        if (_model == null) return;
         View3D.SetMesh(_model.Mesh);
         FeatureTreePanel.Refresh();
         PropertyPanel.Refresh();
         ConfigurationPanel.Refresh();
         PropertiesPane.Refresh();
         var file = _model.FilePath == null ? _model.Name : Path.GetFileName(_model.FilePath);
-        TitleText.Text = $"STAWN CAD Pro - {file}{(_model.IsDirty ? " *" : "")}";
-        Title = TitleText.Text;
-        StatusLeft.Text = _model.RebuildErrors.Count == 0
-            ? $"{_model.Name}  ·  Editing Part  ·  {_model.ActiveConfiguration}"
-            : $"Rebuild errors: {string.Join("; ", _model.RebuildErrors)}";
-        StatusRight.Text = $"Mass {_model.Mass.Mass:0.000} g   ·   MMGS";
+        TitleText.Text = $"{file}{(_model.IsDirty ? " *" : "")}";
+        Title = $"STAWN CAD Pro - {TitleText.Text}";
+        UpdateStatus();
+        CommandManager.RefreshEnabled();
+    }
+
+    private void UpdateStatus(string? prompt = null)
+    {
+        if (_model == null) return;
+        StatusLeft.Text = prompt ?? (_model.RebuildErrors.Count == 0 ? "STAWN CAD Pro" : $"Rebuild errors: {string.Join("; ", _model.RebuildErrors)}");
+        StatusMass.Text = $"{_model.Mass.Mass:0.000} g";
+        if (View3D.Sketching)
+        {
+            StatusEditing.Text = $"Editing {View3D.SketchName}";
+            StatusDefinition.Text = View3D.SketchStatus;
+            StatusDefinition.Foreground = new SolidColorBrush(View3D.SketchStatus switch
+            {
+                "Fully Defined" => Colors.Black,
+                "Under Defined" => Windows.UI.Color.FromArgb(255, 0, 70, 220),
+                _ => Colors.Red,
+            });
+            StatusCoordinates.Text = View3D.SketchCursor is { } c
+                ? string.Format(CultureInfo.InvariantCulture, "{0:0.##}mm   {1:0.##}mm   0mm", c.X, c.Y) : "";
+        }
+        else
+        {
+            StatusEditing.Text = $"Editing Part  ·  {_model.ActiveConfiguration}";
+            StatusDefinition.Text = "";
+            StatusCoordinates.Text = "";
+        }
     }
 
     private void SetDocumentCommandsEnabled(bool on)
@@ -92,21 +131,45 @@ public sealed partial class MainWindow : Window
         TaskPaneColumn.Width = on ? new GridLength(300) : new GridLength(0);
     }
 
-    // CommandManager
+    // ---------------------------------------------------------------- Toolbars
+
+    private void BuildQuickAccess()
+    {
+        foreach (var (icon, tip, action) in new (string, string, Action)[]
+                 {
+                     ("new", "New (Ctrl+N)", () => OpenInWindow(PartModel.Empty())),
+                     ("open", "Open (Ctrl+O)", () => _ = OpenAsync()),
+                     ("save", "Save (Ctrl+S)", () => _ = SaveAsync(false)),
+                     ("rebuild", "Rebuild (Ctrl+B)", () => _model?.Refresh()),
+                     ("options", "Run Commands", () => RunCommands()),
+                 })
+        {
+            var b = SmallButton(icon, tip, action);
+            QuickAccess.Children.Add(b);
+        }
+        var rebuild = new Microsoft.UI.Xaml.Input.KeyboardAccelerator { Key = Windows.System.VirtualKey.B, Modifiers = Windows.System.VirtualKeyModifiers.Control };
+        rebuild.Invoked += (_, e) => { _model?.Refresh(); e.Handled = true; };
+        Root.KeyboardAccelerators.Add(rebuild);
+    }
 
     private void BuildCommandManager()
     {
-        AddButton(FeaturesBar, "Extruded Boss/Base", "", () => _ = ExtrudeAsync(false));
-        AddButton(FeaturesBar, "Revolved Boss/Base", "", () => _ = RevolveAsync(false));
-        AddButton(FeaturesBar, "Extruded Cut", "", () => _ = ExtrudeAsync(true));
-        AddButton(FeaturesBar, "Revolved Cut", "", () => _ = RevolveAsync(true));
-        FeaturesBar.PrimaryCommands.Add(new AppBarSeparator());
-        AddButton(FeaturesBar, "Fillet", "", () => _ = EdgeFeatureAsync("fillet"));
-        AddButton(FeaturesBar, "Chamfer", "", () => _ = EdgeFeatureAsync("chamfer"));
-        FeaturesBar.PrimaryCommands.Add(new AppBarSeparator());
-        AddButton(FeaturesBar, "Import STEP", "", () => _ = ImportStepAsync());
+        bool HasPart() => _model != null;
+        bool HasSketch() => FeatureSketch() != null;
 
-        var sketch = new AppBarButton { Label = "Sketch", Icon = new FontIcon { Glyph = "\uE70F" } };
+        var features = CommandManager.AddTab("Features");
+        CommandManager.Add(features, "Extruded Boss/Base", "extrude", () => ShowExtrudePage(false), "Extrude a sketch to add material", HasSketch);
+        CommandManager.Add(features, "Revolved Boss/Base", "revolve", () => ShowRevolvePage(false), "Revolve a sketch about a centerline", HasSketch);
+        Ribbon.AddSeparator(features);
+        CommandManager.Add(features, "Extruded Cut", "cut-extrude", () => ShowExtrudePage(true), "Extrude a sketch to remove material", HasSketch);
+        CommandManager.Add(features, "Revolved Cut", "cut-revolve", () => ShowRevolvePage(true), "Revolve a sketch to remove material", HasSketch);
+        Ribbon.AddSeparator(features);
+        CommandManager.Add(features, "Fillet", "fillet", () => ShowEdgePage("fillet"), "Round the edges of the body", HasPart);
+        CommandManager.Add(features, "Chamfer", "chamfer", () => ShowEdgePage("chamfer"), "Bevel the edges of the body", HasPart);
+        Ribbon.AddSeparator(features);
+        CommandManager.Add(features, "Import STEP", "import", () => _ = ImportStepAsync());
+
+        var sketch = CommandManager.AddTab("Sketch");
         var planes = new MenuFlyout();
         foreach (var plane in new[] { "Front", "Top", "Right" })
         {
@@ -119,36 +182,58 @@ public sealed partial class MainWindow : Window
         editSelected.Click += (_, _) => { if (SelectedSketch() is { } name) EditSketch(name); };
         planes.Items.Add(editSelected);
         planes.Opening += (_, _) => editSelected.IsEnabled = SelectedSketch() != null;
-        sketch.Flyout = planes;
-        ToolTipService.SetToolTip(sketch, "Sketch on a plane, or edit the selected sketch");
-        SketchBar.PrimaryCommands.Add(sketch);
-        AddButton(SketchBar, "Exit Sketch", "\uE8FB", ExitSketch);
-        SketchBar.PrimaryCommands.Add(new AppBarSeparator());
-        foreach (var (label, glyph, tool) in new[] { ("Select", "\uE8B0", "select"), ("Line", "\uE7B5", "line"),
-                                                     ("Centerline", "\uE738", "centerline"), ("Rectangle", "\uE739", "rectangle"),
-                                                     ("Circle", "\uEA3A", "circle"), ("Arc", "\uE7AD", "arc"),
-                                                     ("Smart Dimension", "\uE7C0", "dimension") })
-            AddButton(SketchBar, label, glyph, () =>
-            {
-                if (InSketch) SketchView.SetTool(tool);
-                else _ = Dialogs.MessageAsync(Root, label, "Start a sketch first: Sketch > Front, Top or Right Plane, or edit a sketch from the feature tree.");
-            });
+        CommandManager.AddMenu(sketch, "Sketch", "sketch", planes, "Sketch on a plane, or edit the selected sketch");
+        _exitSketchButton = CommandManager.Add(sketch, "Exit Sketch", "exit-sketch", ExitSketch, "Close the sketch and rebuild", () => View3D.Sketching);
+        CommandManager.Add(sketch, "Smart Dimension", "dimension", () => SketchTool("dimension"), "Dimension the selected geometry");
+        Ribbon.AddSeparator(sketch);
+        foreach (var (label, icon, tool) in new[] { ("Line", "line", "line"), ("Centerline", "centerline", "centerline"),
+                                                     ("Corner Rectangle", "rectangle", "rectangle"), ("Circle", "circle", "circle"),
+                                                     ("Centerpoint Arc", "arc", "arc") })
+            CommandManager.Add(sketch, label, icon, () => SketchTool(tool));
+        Ribbon.AddSeparator(sketch);
+        CommandManager.Add(sketch, "Select", "select", () => SketchTool("select"), "Select sketch geometry to add relations or delete it");
+        CommandManager.Add(sketch, "Add Relation", "relation", () => SketchTool("select"), "Select two or more entities, then choose the relation");
+        CommandManager.Add(sketch, "Normal To", "normal-to", () => View3D.NormalTo(), "Look straight at the sketch (Ctrl+8)", () => View3D.Sketching);
 
-        AddButton(EvaluateBar, "Mass Properties", "", () => _ = ShowMassPropertiesAsync());
-        AddButton(EvaluateBar, "Rebuild", "", () => _model?.Refresh());
+        var evaluate = CommandManager.AddTab("Evaluate");
+        CommandManager.Add(evaluate, "Mass Properties", "mass", () => _ = ShowMassPropertiesAsync());
+        CommandManager.Add(evaluate, "Material", "material", () => _ = EditMaterialAsync());
+        CommandManager.Add(evaluate, "Rebuild", "rebuild", () => _model?.Refresh());
 
-        AddButton(DrawingBar, "Preview Drawing", "", () => _ = PreviewDrawingAsync());
-        AddButton(DrawingBar, "Save As PDF", "", () => _ = ExportDrawingAsync("pdf"));
-        AddButton(DrawingBar, "Save As DXF", "", () => _ = ExportDrawingAsync("dxf"));
-        AddButton(DrawingBar, "Save As SVG", "", () => _ = ExportDrawingAsync("svg"));
+        var drawing = CommandManager.AddTab("Drawing");
+        CommandManager.Add(drawing, "Make Drawing", "drawing", () => _ = PreviewDrawingAsync(), "Standard three views on an A3 sheet");
+        CommandManager.Add(drawing, "Save as PDF", "pdf", () => _ = ExportDrawingAsync("pdf"));
+        CommandManager.Add(drawing, "Save as DXF", "dxf", () => _ = ExportDrawingAsync("dxf"));
+        CommandManager.Add(drawing, "Save as SVG", "svg", () => _ = ExportDrawingAsync("svg"));
     }
 
-    private static void AddButton(CommandBar bar, string label, string glyph, Action action)
+    private void BuildManagerTabs()
     {
-        var b = new AppBarButton { Label = label, Icon = new FontIcon { Glyph = glyph } };
-        b.Click += (_, _) => action();
-        ToolTipService.SetToolTip(b, label);
-        bar.PrimaryCommands.Add(b);
+        foreach (var (icon, tip, panel) in new (string, string, UIElement)[]
+                 {
+                     ("part", "FeatureManager design tree", FeatureTreePanel),
+                     ("options", "PropertyManager", PropertyPanel),
+                     ("bodies", "ConfigurationManager", ConfigurationPanel),
+                 })
+            ManagerTabs.Children.Add(SmallButton(icon, tip, () => { ClosePage(); ShowManager(panel); }));
+    }
+
+    private void ShowManager(UIElement panel)
+    {
+        FeatureTreePanel.Visibility = panel == FeatureTreePanel ? Visibility.Visible : Visibility.Collapsed;
+        PropertyPanel.Visibility = panel == PropertyPanel ? Visibility.Visible : Visibility.Collapsed;
+        ConfigurationPanel.Visibility = panel == ConfigurationPanel ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void BuildTaskTabs()
+    {
+        TaskTabs.Children.Add(SmallButton("annotations", "Custom Properties", () =>
+        {
+            bool open = TaskPaneColumn.Width.Value > 0;
+            TaskPaneColumn.Width = new GridLength(open ? 0 : 300);
+            PropertiesPane.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
+        }));
+        TaskTabs.Children.Add(SmallButton("material", "Material", () => _ = EditMaterialAsync()));
     }
 
     private static readonly (DisplayStyle Style, string Label)[] DisplayStyles =
@@ -156,19 +241,16 @@ public sealed partial class MainWindow : Window
 
     private void BuildViewMenus()
     {
-        OrientationMenu.Items.Clear();
         foreach (var item in OrientationItems()) OrientationMenu.Items.Add(item);
         foreach (var item in DisplayStyleItems()) DisplayStyleMenu.Items.Add(item);
-
-        var fit = HeadsUpButton("\uE9A6", "Zoom to Fit (F)");
-        fit.Click += (_, _) => View3D.ZoomToFit();
-        var orientation = HeadsUpButton("\uF158", "View Orientation");
+        HeadsUp.Children.Add(SmallButton("zoom-fit", "Zoom to Fit (F)", () => View3D.ZoomToFit()));
+        var orientation = SmallButton("view", "View Orientation", () => { });
         orientation.Flyout = Flyout(OrientationItems());
-        var style = HeadsUpButton("\uE793", "Display Style");
-        style.Flyout = Flyout(DisplayStyleItems());
-        HeadsUp.Children.Add(fit);
         HeadsUp.Children.Add(orientation);
+        var style = SmallButton("display", "Display Style", () => { });
+        style.Flyout = Flyout(DisplayStyleItems());
         HeadsUp.Children.Add(style);
+        HeadsUp.Children.Add(SmallButton("normal-to", "Normal To (Ctrl+8)", () => View3D.NormalTo()));
     }
 
     private MenuFlyoutItem[] OrientationItems() => Enum.GetValues<StandardView>().Select(v =>
@@ -192,22 +274,369 @@ public sealed partial class MainWindow : Window
         return menu;
     }
 
-    private static Button HeadsUpButton(string glyph, string tip)
+    private static Button SmallButton(string icon, string tip, Action action)
     {
-        var b = new Button { Content = new FontIcon { Glyph = glyph, FontSize = 14 }, Padding = new Thickness(8, 4, 8, 4), BorderThickness = new Thickness(0) };
-        b.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        var b = new Button
+        {
+            Content = Icons.Get(icon, 20), Padding = new Thickness(5, 3, 5, 3), BorderThickness = new Thickness(0),
+            Background = new SolidColorBrush(Colors.Transparent),
+        };
+        b.Click += (_, _) => action();
         ToolTipService.SetToolTip(b, tip);
         return b;
     }
 
-    private void OnManagerTabChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+    // ---------------------------------------------------------------- Confirmation corner
+
+    private void SetConfirmationCorner(Action? ok, Action? cancel, string okTip = "OK")
     {
-        FeatureTreePanel.Visibility = sender.SelectedItem == FeatureTab ? Visibility.Visible : Visibility.Collapsed;
-        PropertyPanel.Visibility = sender.SelectedItem == PropertyTab ? Visibility.Visible : Visibility.Collapsed;
-        ConfigurationPanel.Visibility = sender.SelectedItem == ConfigurationTab ? Visibility.Visible : Visibility.Collapsed;
+        ConfirmationCorner.Children.Clear();
+        if (ok != null) ConfirmationCorner.Children.Add(CornerButton(View3D.Sketching && PageHost.Content == null ? "exit-sketch" : "ok", okTip, ok));
+        if (cancel != null) ConfirmationCorner.Children.Add(CornerButton("cancel", "Cancel", cancel));
+        ConfirmationCorner.Visibility = ok != null || cancel != null ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    // File menu
+    private static Button CornerButton(string icon, string tip, Action action)
+    {
+        var b = new Button
+        {
+            Content = Icons.Get(icon, 28), Padding = new Thickness(6), CornerRadius = new CornerRadius(4),
+            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(200, 255, 255, 255)),
+        };
+        b.Click += (_, _) => action();
+        ToolTipService.SetToolTip(b, tip);
+        return b;
+    }
+
+    // ---------------------------------------------------------------- PropertyManager pages
+
+    private void ShowPage(PropertyManagerPage page)
+    {
+        PageHost.Content = page;
+        PageHost.Visibility = Visibility.Visible;
+        SetConfirmationCorner(page.Ok, page.Cancel);
+    }
+
+    private void ClosePage()
+    {
+        PageHost.Content = null;
+        PageHost.Visibility = Visibility.Collapsed;
+        if (View3D.Sketching) SetConfirmationCorner(ExitSketch, null, "Exit Sketch");
+        else SetConfirmationCorner(null, null);
+    }
+
+    private static NumberBox Number(string header, double value, double min, double step) => new()
+    {
+        Header = header, Value = value, Minimum = min, SmallChange = step, LargeChange = step * 10, AcceptsExpression = true,
+        SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline,
+    };
+
+    private static TextBlock Note(string text) => new() { Text = text, TextWrapping = TextWrapping.Wrap, FontSize = 12 };
+
+    private void ShowExtrudePage(bool cut)
+    {
+        if (_model == null || FeatureSketch() is not { } sketch) return;
+        var title = cut ? "Cut-Extrude" : "Boss-Extrude";
+        var condition = new ComboBox { Header = "End Condition", ItemsSource = new[] { "Blind", "Mid Plane" }, SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var reverse = new CheckBox { Content = "Reverse Direction" };
+        var depth = Number("Depth (mm)", 10, 0.001, 1);
+        PropertyManagerPage? page = null;
+        page = new PropertyManagerPage(title, cut ? "cut-extrude" : "extrude", () =>
+        {
+            if (double.IsNaN(depth.Value) || depth.Value <= 0) { page!.SetMessage("Enter a depth greater than zero."); return; }
+            RunFeature(title, new JsonObject
+            {
+                ["op"] = cut ? "cut_extrude" : "extrude", ["sketch"] = sketch, ["depth"] = depth.Value,
+                ["mid_plane"] = condition.SelectedIndex == 1, ["reverse"] = reverse.IsChecked == true,
+            }, page!);
+        }, ClosePage);
+        page.SetMessage($"Extrudes {sketch} normal to its plane.");
+        page.AddGroup("From").Children.Add(Note("Sketch Plane"));
+        var d1 = page.AddGroup("Direction 1");
+        d1.Children.Add(condition);
+        d1.Children.Add(reverse);
+        d1.Children.Add(depth);
+        page.AddGroup("Selected Contours").Children.Add(Note(sketch));
+        ShowPage(page);
+    }
+
+    private void ShowRevolvePage(bool cut)
+    {
+        if (_model == null || FeatureSketch() is not { } sketch) return;
+        var title = cut ? "Cut-Revolve" : "Revolve";
+        var angle = Number("Angle (°)", 360, 0.1, 15);
+        angle.Maximum = 360;
+        PropertyManagerPage? page = null;
+        page = new PropertyManagerPage(title, cut ? "cut-revolve" : "revolve", () =>
+        {
+            if (double.IsNaN(angle.Value)) return;
+            RunFeature(title, new JsonObject { ["op"] = cut ? "cut_revolve" : "revolve", ["sketch"] = sketch, ["angle"] = angle.Value }, page!);
+        }, ClosePage);
+        page.SetMessage($"Revolves {sketch} about its first centerline.");
+        page.AddGroup("Axis of Revolution").Children.Add(Note("First centerline of the sketch"));
+        var d1 = page.AddGroup("Direction 1");
+        d1.Children.Add(Note("Blind"));
+        d1.Children.Add(angle);
+        page.AddGroup("Selected Contours").Children.Add(Note(sketch));
+        ShowPage(page);
+    }
+
+    private void ShowEdgePage(string op)
+    {
+        if (_model == null) return;
+        bool fillet = op == "fillet";
+        var title = fillet ? "Fillet" : "Chamfer";
+        var size = Number(fillet ? "Radius (mm)" : "Distance (mm)", fillet ? 0.5 : 0.3, 0.001, 0.1);
+        var edges = new RadioButtons { ItemsSource = new[] { "All edges", "Circular edges", "Straight edges" }, SelectedIndex = 1 };
+        PropertyManagerPage? page = null;
+        page = new PropertyManagerPage(title, op, () =>
+        {
+            if (double.IsNaN(size.Value) || size.Value <= 0) { page!.SetMessage("Enter a size greater than zero."); return; }
+            RunFeature(title, new JsonObject
+            {
+                ["op"] = op, [fillet ? "radius" : "distance"] = size.Value,
+                ["edges"] = new[] { "all", "circular", "linear" }[Math.Max(0, edges.SelectedIndex)],
+            }, page!);
+        }, ClosePage);
+        page.AddGroup(fillet ? "Fillet Type" : "Chamfer Type").Children.Add(Note(fillet ? "Constant Size Fillet" : "Distance Distance (equal)"));
+        var items = page.AddGroup(fillet ? "Items To Fillet" : "Items To Chamfer");
+        items.Children.Add(edges);
+        items.Children.Add(size);
+        ShowPage(page);
+    }
+
+    /// <summary>Closes any open sketch, adds the feature and rebuilds; errors stay on the page.</summary>
+    private void RunFeature(string title, JsonObject command, PropertyManagerPage page)
+    {
+        if (_model == null) return;
+        if (View3D.Sketching) ExitSketch();
+        var reply = _model.Command(command);
+        _model.Refresh();
+        if (reply["ok"]?.GetValue<bool>() != true)
+        {
+            page.SetMessage(reply["error"]?.GetValue<string>() ?? $"{title} failed.");
+            ShowPage(page);
+            return;
+        }
+        if (reply["rebuild_ok"]?.GetValue<bool>() == false)
+        {
+            page.SetMessage(string.Join("\n", (reply["rebuild_errors"] as JsonArray ?? new()).Select(x => x?.ToString())));
+            ShowPage(page);
+            return;
+        }
+        ClosePage();
+        ShowManager(FeatureTreePanel);
+    }
+
+    // ---------------------------------------------------------------- Sketch mode
+
+    private string? SelectedSketch() =>
+        _model?.SelectedFeature is { } f && _model.FeatureList.FirstOrDefault(x => x.Name == f).Type == "Sketch" ? f : null;
+
+    /// <summary>The sketch a feature uses: the open one, else the selected one, else the last one.</summary>
+    private string? FeatureSketch()
+    {
+        if (View3D.Sketching) return View3D.SketchName;
+        if (SelectedSketch() is { } s) return s;
+        return _model?.FeatureList.LastOrDefault(f => f.Type == "Sketch").Name;
+    }
+
+    private void StartSketch(string plane)
+    {
+        if (_model == null) return;
+        if (View3D.Sketching) ExitSketch();
+        var reply = _model.Command(new JsonObject { ["op"] = "create_sketch", ["plane"] = plane });
+        if (reply["sketch"]?.GetValue<string>() is { } name) EditSketch(name);
+    }
+
+    private void EditSketch(string name)
+    {
+        if (_model == null) return;
+        if (View3D.Sketching) ExitSketch();
+        var state = _model.Command(new JsonObject { ["op"] = "edit_sketch", ["sketch"] = name });
+        if (state["ok"]?.GetValue<bool>() != true) return;
+        _model.Refresh();  // shows a new sketch in the feature tree
+        _model.Select(name);
+        ClosePage();
+        View3D.BeginSketch(_model, state);
+        CommandManager.Select("Sketch");
+        CommandManager.RefreshEnabled();
+        SetConfirmationCorner(ExitSketch, null, "Exit Sketch");
+        SketchTool("line");
+    }
+
+    /// <summary>Closes the sketch and rebuilds the part, so features that use it update.</summary>
+    private void ExitSketch()
+    {
+        if (_model == null || !View3D.Sketching) return;
+        HideModifyBox();
+        _model.Command(new JsonObject { ["op"] = "close_sketch" });
+        LeaveSketchMode();
+        _model.Refresh();
+    }
+
+    private void LeaveSketchMode()
+    {
+        if (!View3D.Sketching) return;
+        View3D.EndSketch();
+        ClosePage();
+        ShowManager(FeatureTreePanel);
+        CommandManager.RefreshEnabled();
+    }
+
+    private void SketchTool(string tool)
+    {
+        if (!View3D.Sketching)
+        {
+            if (tool != "select")
+                _ = Dialogs.MessageAsync(Root, "Sketch", "Start a sketch first: Sketch > Front, Top or Right Plane, or double-click a plane or sketch in the tree.");
+            return;
+        }
+        View3D.SetSketchTool(tool);
+    }
+
+    private static readonly System.Collections.Generic.Dictionary<string, (string Title, string Icon)> ToolPages = new()
+    {
+        ["line"] = ("Insert Line", "line"), ["centerline"] = ("Insert Centerline", "centerline"),
+        ["rectangle"] = ("Rectangle", "rectangle"), ["circle"] = ("Circle", "circle"), ["arc"] = ("Arc", "arc"),
+        ["dimension"] = ("Dimension", "dimension"),
+    };
+
+    private string? _pageKey;
+
+    private void OnSketchChanged(string ev, JsonObject state, Point at)
+    {
+        var prompt = state["prompt"]?.GetValue<string>() ?? "";
+        _tool = state["tool"]?.GetValue<string>() ?? "select";
+        UpdateStatus(prompt);
+        if (ev == "move") return;  // the page and relations only change on clicks and keys
+
+        // Left pane: Add Relations for a selection, the tool's page while drawing, else the tree.
+        var relations = (state["relations"] as JsonArray ?? new JsonArray()).Select(r => r!.GetValue<string>()).ToList();
+        var selection = (state["selection"] as JsonArray)?.Count ?? 0;
+        var key = selection > 0 ? "relations:" + string.Join(",", relations) + selection : _tool;
+        if (key != _pageKey)
+        {
+            _pageKey = key;
+            if (selection > 0)
+            {
+                var page = new PropertyManagerPage("Properties", "relation", () => View3D.SketchEscape(), null);
+                var add = page.AddGroup("Add Relations");
+                if (relations.Count == 0) add.Children.Add(Note("Select another entity to see the relations that apply."));
+                for (int i = 0; i < relations.Count; i++)
+                {
+                    int index = i;
+                    var b = new Button { Content = relations[i], HorizontalAlignment = HorizontalAlignment.Stretch };
+                    b.Click += (_, _) => View3D.AddRelation(index);
+                    add.Children.Add(b);
+                }
+                page.AddGroup("Options").Children.Add(Note("Delete removes the selected geometry. Esc clears the selection."));
+                ShowPage(page);
+            }
+            else if (ToolPages.TryGetValue(_tool, out var t))
+            {
+                var page = new PropertyManagerPage(t.Title, t.Icon, () => View3D.SetSketchTool("select"), null);
+                page.SetMessage(prompt);
+                page.AddGroup("Options").Children.Add(Note(_tool switch
+                {
+                    "line" => "Click to place points; the chain ends on its start point or with Esc. Lines snap to points and become horizontal or vertical near those directions.",
+                    "dimension" => "Click a line, circle or arc, or two points or two lines, then type the value.",
+                    _ => "Click to place points. Esc cancels.",
+                }));
+                ShowPage(page);
+            }
+            else
+            {
+                ClosePage();
+                ShowManager(FeatureTreePanel);
+            }
+        }
+        else if (PageHost.Content is PropertyManagerPage current && ToolPages.ContainsKey(_tool))
+        {
+            current.SetMessage(prompt);
+        }
+        if (ev is "relation" or "dimension" or "delete") FeatureTreePanel.Refresh();
+
+        // Smart Dimension: the Modify box opens at the cursor as soon as the geometry is picked.
+        if (ev == "click" && state["dimension_request"] is JsonObject request) ShowModifyBox(request, at);
+    }
+
+    // ---------------------------------------------------------------- Modify box
+
+    private JsonArray _modifyOptions = new();
+
+    private void BuildModifyBox()
+    {
+        ModifyOk.Content = Icons.Get("ok", 16);
+        ModifyCancel.Content = Icons.Get("cancel", 16);
+        ModifyOk.Click += (_, _) => CommitModify();
+        ModifyCancel.Click += (_, _) => { HideModifyBox(); View3D.SketchEscape(); };
+        ModifyOptions.SelectionChanged += (_, _) =>
+        {
+            int i = Math.Max(0, ModifyOptions.SelectedIndex);
+            if (i < _modifyOptions.Count) ModifyValue.Value = _modifyOptions[i]!["value"]!.GetValue<double>();
+        };
+        ModifyValue.KeyDown += (_, e) =>
+        {
+            if (e.Key == Windows.System.VirtualKey.Enter) { CommitModify(); e.Handled = true; }
+            else if (e.Key == Windows.System.VirtualKey.Escape) { HideModifyBox(); View3D.SketchEscape(); e.Handled = true; }
+        };
+    }
+
+    private void ShowModifyBox(JsonObject request, Point at)
+    {
+        _modifyOptions = request["options"] as JsonArray ?? new JsonArray();
+        if (_modifyOptions.Count == 0) return;
+        ModifyOptions.ItemsSource = _modifyOptions.Select(o => o!["label"]!.GetValue<string>()).ToList();
+        ModifyOptions.Visibility = _modifyOptions.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+        ModifyOptions.SelectedIndex = 0;
+        ModifyName.Text = _modifyOptions[0]!["unit"]?.GetValue<string>() == "deg" ? "degrees" : "mm";
+        ModifyValue.Value = _modifyOptions[0]!["value"]!.GetValue<double>();
+        Canvas.SetLeft(ModifyBox, Math.Min(at.X + 16, Math.Max(0, View3D.ActualWidth - 220)));
+        Canvas.SetTop(ModifyBox, Math.Min(at.Y + 16, Math.Max(0, View3D.ActualHeight - 160)));
+        ModifyBox.Visibility = Visibility.Visible;
+        ModifyValue.Focus(FocusState.Programmatic);
+    }
+
+    private void CommitModify()
+    {
+        if (double.IsNaN(ModifyValue.Value)) return;
+        int option = Math.Max(0, ModifyOptions.SelectedIndex);
+        double value = ModifyValue.Value;
+        HideModifyBox();
+        View3D.AddDimension(option, value);
+        View3D.Focus(FocusState.Programmatic);
+    }
+
+    private void HideModifyBox() => ModifyBox.Visibility = Visibility.Collapsed;
+
+    // ---------------------------------------------------------------- Demo (CI screenshots)
+
+    /// <summary>Maximises the window and, for "sketch", draws and dimensions a rectangle on the Front plane.</summary>
+    public void RunDemo(string what)
+    {
+        (AppWindow.Presenter as Microsoft.UI.Windowing.OverlappedPresenter)?.Maximize();
+        if (what != "sketch") return;
+        var timer = DispatcherQueue.CreateTimer();
+        timer.Interval = TimeSpan.FromSeconds(3);
+        timer.IsRepeating = false;
+        timer.Tick += (_, _) =>
+        {
+            StartSketch("Front");
+            SketchTool("rectangle");
+            View3D.SketchClick(10, 12);
+            View3D.SketchClick(40, 30);
+            SketchTool("dimension");
+            View3D.SketchClick(25, 12);
+            View3D.AddDimension(0, 30);
+            View3D.SketchClick(40, 21);
+            SketchTool("line");
+            View3D.SketchMove(55, 40);
+        };
+        timer.Start();
+    }
+
+    // ---------------------------------------------------------------- Menus
 
     private void OnNew(object sender, RoutedEventArgs e) => OpenInWindow(PartModel.Empty());
     private void OnSample(object sender, RoutedEventArgs e) => OpenInWindow(PartModel.SampleShaft());
@@ -219,7 +648,18 @@ public sealed partial class MainWindow : Window
     private void OnExportStl(object sender, RoutedEventArgs e) => _ = ExportAsync("STL", ".stl", (m, p) => m.ExportStl(p));
     private void OnExit(object sender, RoutedEventArgs e) => Close();
     private void OnZoomToFit(object sender, RoutedEventArgs e) => View3D.ZoomToFit();
-    private void OnRunCommands(object sender, RoutedEventArgs e) => RunCommands(Examples.Sketch);
+    private void OnNormalTo(object sender, RoutedEventArgs e) => View3D.NormalTo();
+    private void OnSketchFront(object sender, RoutedEventArgs e) => StartSketch("Front");
+    private void OnSketchTop(object sender, RoutedEventArgs e) => StartSketch("Top");
+    private void OnSketchRight(object sender, RoutedEventArgs e) => StartSketch("Right");
+    private void OnInsertExtrude(object sender, RoutedEventArgs e) => ShowExtrudePage(false);
+    private void OnInsertRevolve(object sender, RoutedEventArgs e) => ShowRevolvePage(false);
+    private void OnInsertCutExtrude(object sender, RoutedEventArgs e) => ShowExtrudePage(true);
+    private void OnInsertCutRevolve(object sender, RoutedEventArgs e) => ShowRevolvePage(true);
+    private void OnInsertFillet(object sender, RoutedEventArgs e) => ShowEdgePage("fillet");
+    private void OnInsertChamfer(object sender, RoutedEventArgs e) => ShowEdgePage("chamfer");
+    private void OnMassProperties(object sender, RoutedEventArgs e) => _ = ShowMassPropertiesAsync();
+    private void OnRunCommands(object sender, RoutedEventArgs e) => RunCommands();
     private void OnEditMaterial(object sender, RoutedEventArgs e) => _ = EditMaterialAsync();
     private void OnAbout(object sender, RoutedEventArgs e) =>
         _ = Dialogs.MessageAsync(Root, "STAWN CAD Pro", "Parametric part modelling for Windows 11 and macOS.\nVersion 0.1.0");
@@ -245,6 +685,7 @@ public sealed partial class MainWindow : Window
     private async Task SaveAsync(bool saveAs)
     {
         if (_model == null) return;
+        if (View3D.Sketching) ExitSketch();
         var path = _model.FilePath;
         if (saveAs || path == null)
         {
@@ -273,155 +714,10 @@ public sealed partial class MainWindow : Window
         if (path != null && !export(_model, path)) await Dialogs.MessageAsync(Root, "Export failed", $"Could not export {kind} to {path}.");
     }
 
-    // Sketch mode
-
-    private bool InSketch => SketchView.Visibility == Visibility.Visible;
-
-    private string? SelectedSketch() =>
-        _model?.SelectedFeature is { } f && _model.FeatureList.FirstOrDefault(x => x.Name == f).Type == "Sketch" ? f : null;
-
-    private void StartSketch(string plane)
+    private void RunCommands()
     {
         if (_model == null) return;
-        if (InSketch) ExitSketch();
-        var reply = _model.Command(new JsonObject { ["op"] = "create_sketch", ["plane"] = plane });
-        if (reply["sketch"]?.GetValue<string>() is { } name) EditSketch(name);
-    }
-
-    private void EditSketch(string name)
-    {
-        if (_model == null) return;
-        if (InSketch) ExitSketch();
-        var state = _model.Command(new JsonObject { ["op"] = "edit_sketch", ["sketch"] = name });
-        if (state["ok"]?.GetValue<bool>() != true) return;
-        _model.Refresh();  // shows a new sketch in the feature tree
-        _model.Select(name);
-        View3D.Visibility = Visibility.Collapsed;
-        HeadsUp.Visibility = Visibility.Collapsed;
-        SketchView.Visibility = Visibility.Visible;
-        SketchPanel.Visibility = Visibility.Visible;
-        SketchView.Open(_model, state);
-        CommandManager.SelectedIndex = 1;
-        SketchView.SetTool("line");
-    }
-
-    /// <summary>Closes the sketch and rebuilds the part, so features that use it update.</summary>
-    private void ExitSketch()
-    {
-        if (_model == null || !InSketch) return;
-        _model.Command(new JsonObject { ["op"] = "close_sketch" });
-        LeaveSketchMode();
-        _model.Refresh();
-    }
-
-    private void LeaveSketchMode()
-    {
-        SketchView.Visibility = Visibility.Collapsed;
-        SketchPanel.Visibility = Visibility.Collapsed;
-        View3D.Visibility = Visibility.Visible;
-        HeadsUp.Visibility = Visibility.Visible;
-    }
-
-    private bool _modifyOpen;
-
-    private async void OnSketchEditorChanged(string ev, JsonObject state)
-    {
-        SketchPrompt.Text = state["prompt"]?.GetValue<string>() ?? "";
-        StatusLeft.Text = $"Editing {SketchView.SketchName}  ·  {SketchPrompt.Text}";
-        int dof = SketchView.DegreesOfFreedom;
-        StatusRight.Text = SketchView.Status == "Under Defined" ? $"Under Defined ({dof} free)" : SketchView.Status;
-
-        RelationButtons.Children.Clear();
-        var relations = (state["relations"] as JsonArray ?? new JsonArray()).Select(r => r!.GetValue<string>()).ToList();
-        if (relations.Count > 0) RelationButtons.Children.Add(new TextBlock { Text = "Add Relation:", VerticalAlignment = VerticalAlignment.Center });
-        for (int i = 0; i < relations.Count; i++)
-        {
-            int index = i;
-            var b = new Button { Content = relations[i] };
-            b.Click += (_, _) => SketchView.AddRelation(index);
-            RelationButtons.Children.Add(b);
-        }
-
-        // Smart Dimension: ask for the value as soon as the geometry is picked.
-        if (ev == "click" && !_modifyOpen && state["dimension_request"] is JsonObject request)
-        {
-            _modifyOpen = true;
-            try
-            {
-                if (await Dialogs.DimensionAsync(Root, request) is { } d) SketchView.AddDimension(d.Option, d.Value);
-                else SketchView.Escape();
-            }
-            finally { _modifyOpen = false; }
-        }
-    }
-
-    // Features and tools
-
-    /// <summary>The sketch a feature uses: the open one, else the selected one, else the last one.</summary>
-    private string? FeatureSketch()
-    {
-        if (InSketch) return SketchView.SketchName;
-        if (SelectedSketch() is { } s) return s;
-        return _model?.FeatureList.LastOrDefault(f => f.Type == "Sketch").Name;
-    }
-
-    private async Task ExtrudeAsync(bool cut)
-    {
-        if (_model == null) return;
-        var title = cut ? "Extruded Cut" : "Extruded Boss/Base";
-        if (FeatureSketch() is not { } sketch)
-        {
-            await Dialogs.MessageAsync(Root, title, "Draw a closed sketch first (Sketch tab).");
-            return;
-        }
-        if (await Dialogs.ExtrudeAsync(Root, cut, sketch) is not { } e) return;
-        ExitSketch();
-        var reply = _model.Command(new JsonObject
-        {
-            ["op"] = cut ? "cut_extrude" : "extrude", ["sketch"] = sketch, ["depth"] = e.Depth, ["mid_plane"] = e.MidPlane, ["reverse"] = e.Reverse,
-        });
-        await AfterFeatureAsync(reply, title);
-    }
-
-    private async Task RevolveAsync(bool cut)
-    {
-        if (_model == null) return;
-        var title = cut ? "Revolved Cut" : "Revolved Boss/Base";
-        if (FeatureSketch() is not { } sketch)
-        {
-            await Dialogs.MessageAsync(Root, title, "Draw a closed sketch with a centerline first (Sketch tab).");
-            return;
-        }
-        if (await Dialogs.RevolveAsync(Root, cut, sketch) is not { } angle) return;
-        ExitSketch();
-        var reply = _model.Command(new JsonObject { ["op"] = cut ? "cut_revolve" : "revolve", ["sketch"] = sketch, ["angle"] = angle });
-        await AfterFeatureAsync(reply, title);
-    }
-
-    private async Task AfterFeatureAsync(JsonObject reply, string title)
-    {
-        _model?.Refresh();
-        if (reply["ok"]?.GetValue<bool>() != true)
-            await Dialogs.MessageAsync(Root, title, reply["error"]?.GetValue<string>() ?? reply.ToJsonString());
-        else if (reply["rebuild_ok"]?.GetValue<bool>() == false)
-            await Dialogs.MessageAsync(Root, title, string.Join("\n", (reply["rebuild_errors"] as JsonArray ?? new()).Select(x => x?.ToString())));
-    }
-
-
-    private void RunCommands(string example)
-    {
-        if (_model == null) return;
-        _ = Dialogs.RunCommandsAsync(Root, _model, example);
-    }
-
-    private async Task EdgeFeatureAsync(string op)
-    {
-        if (_model == null) return;
-        var result = await Dialogs.EdgeFeatureAsync(Root, op);
-        if (result is not { } r) return;
-        var size = op == "fillet" ? "radius" : "distance";
-        var reply = _model.Execute($"{{\"op\":\"{op}\",\"{size}\":{r.Size.ToString(System.Globalization.CultureInfo.InvariantCulture)},\"edges\":\"{r.Edges}\"}}");
-        if (reply.Contains("\"ok\":false")) await Dialogs.MessageAsync(Root, op == "fillet" ? "Fillet" : "Chamfer", reply);
+        _ = Dialogs.RunCommandsAsync(Root, _model, Examples.Sketch);
     }
 
     private async Task ShowMassPropertiesAsync()
@@ -441,7 +737,7 @@ public sealed partial class MainWindow : Window
         if (await Dialogs.MaterialAsync(Root, _model.Material.Name) is { } material) _model.SetMaterial(material.Name, material.Density);
     }
 
-    // Drawings
+    // ---------------------------------------------------------------- Drawings
 
     private async Task PreviewDrawingAsync()
     {

@@ -73,7 +73,7 @@ and reuse an existing point when a new end point lands on it, so consecutive lin
 | `fillet` | Round edges | `edges`: all, circular, linear, or a list of [x,y,z] points on the edges<br>`radius`: mm |
 | `chamfer` | Bevel edges | `distance`: mm<br>`edges`: all, circular, linear, or a list of [x,y,z] points |
 | `rebuild` | Rebuild the model | none |
-| `list_features` | List the feature tree | none |
+| `list_features` | List the feature tree with each sketch's status | `rebuild`: bool, default true |
 | `list_dimensions` | List all driving dimensions with their values | none |
 | `set_dimension` | Change a dimension such as D1@Sketch1 | `name`: D1@Sketch1<br>`this_configuration_only`: bool<br>`value`: number |
 | `suppress` | Suppress or unsuppress a feature in the active configuration | `feature`: name<br>`suppressed`: bool, default true |

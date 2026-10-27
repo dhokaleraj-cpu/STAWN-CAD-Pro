@@ -56,7 +56,7 @@ const OpInfo kOps[] = {
     {"fillet", "Round edges", R"J({"radius":"mm","edges":"all, circular, linear, or a list of [x,y,z] points on the edges"})J"},
     {"chamfer", "Bevel edges", R"J({"distance":"mm","edges":"all, circular, linear, or a list of [x,y,z] points"})J"},
     {"rebuild", "Rebuild the model", R"J({})J"},
-    {"list_features", "List the feature tree", R"J({})J"},
+    {"list_features", "List the feature tree with each sketch's status", R"J({"rebuild":"bool, default true"})J"},
     {"list_dimensions", "List all driving dimensions with their values", R"J({})J"},
     {"set_dimension", "Change a dimension such as D1@Sketch1", R"J({"name":"D1@Sketch1","value":"number","this_configuration_only":"bool"})J"},
     {"suppress", "Suppress or unsuppress a feature in the active configuration", R"J({"feature":"name","suppressed":"bool, default true"})J"},
@@ -352,7 +352,7 @@ json CommandSession::execute(const json& c) {
         } else if (op == "rebuild") {
             // handled below
         } else if (op == "list_features") {
-            doc.rebuild();
+            if (c.value("rebuild", true)) doc.rebuild();  // false: the caller has just rebuilt
             r["features"] = featureList(doc);
             return r;
         } else if (op == "list_dimensions") {

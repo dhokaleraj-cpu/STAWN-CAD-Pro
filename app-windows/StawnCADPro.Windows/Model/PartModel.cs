@@ -23,6 +23,8 @@ public sealed class PartModel : IDisposable
     public StawnNative.MassProperties Mass { get; private set; }
     public IReadOnlyDictionary<string, string> ResolvedProperties { get; private set; } = new Dictionary<string, string>();
     public string? SelectedFeature { get; private set; }
+    /// <summary>Each sketch's status ("Under Defined", "Fully Defined"...), for the tree's (-) and (+) marks.</summary>
+    public IReadOnlyDictionary<string, string> SketchStatus { get; private set; } = new Dictionary<string, string>();
 
     /// <summary>Path of the .stprt file, or null for a new unsaved part.</summary>
     public string? FilePath { get; set; }
@@ -80,6 +82,13 @@ public sealed class PartModel : IDisposable
             return (m?["name"]?.GetValue<string>() ?? "", m?["density"]?.GetValue<double>() ?? 7850);
         }
     }
+
+    /// <summary>The sketch a feature is built from, which the tree shows under it.</summary>
+    public string? SketchOf(string feature) =>
+        Features.OfType<JsonObject>().FirstOrDefault(f => f["name"]?.GetValue<string>() == feature)?["sketchName"]?.GetValue<string>();
+
+    public bool IsCut(string feature) =>
+        Features.OfType<JsonObject>().FirstOrDefault(f => f["name"]?.GetValue<string>() == feature)?["operation"]?.GetValue<string>() == "cut";
 
     public IEnumerable<(string Name, string Type)> FeatureList =>
         Features.OfType<JsonObject>().Select(f => (f["name"]?.GetValue<string>() ?? "?", f["type"]?.GetValue<string>() ?? ""));
@@ -305,6 +314,10 @@ public sealed class PartModel : IDisposable
         ResolvedProperties = props == null ? new Dictionary<string, string>()
             : (JsonNode.Parse(props) as JsonObject)?.ToDictionary(kv => kv.Key, kv => kv.Value?.ToString() ?? "") ?? new Dictionary<string, string>();
         Mesh = MeshBuffers.From(_handle);
+        var list = Command(new JsonObject { ["op"] = "list_features", ["rebuild"] = false });
+        SketchStatus = (list["features"] as JsonArray ?? new JsonArray()).OfType<JsonObject>()
+            .Where(f => f["status"] != null)
+            .ToDictionary(f => f["name"]!.GetValue<string>(), f => f["status"]!.GetValue<string>());
         Changed?.Invoke();
     }
 }

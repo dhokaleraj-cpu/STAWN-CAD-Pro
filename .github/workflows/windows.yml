@@ -58,6 +58,37 @@ jobs:
           Stop-Process $p
           Write-Host "StawnCADPro.exe was still running after 20 s"
 
+      # Screenshots of the sample part and of sketch mode, printed into the log as base64 so
+      # the look can be checked without downloading anything, and uploaded as an artifact.
+      - name: Screenshots
+        if: matrix.arch == 'x64'
+        shell: powershell
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          New-Item -ItemType Directory -Force screenshots | Out-Null
+          foreach ($demo in "part", "sketch") {
+            $p = Start-Process build-windows\app\StawnCADPro.exe -ArgumentList "--demo", $demo -PassThru
+            Start-Sleep -Seconds 25
+            $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($screen.Location, [System.Drawing.Point]::Empty, $screen.Size)
+            $file = "screenshots\$demo.png"
+            $bmp.Save($file, [System.Drawing.Imaging.ImageFormat]::Png)
+            $g.Dispose(); $bmp.Dispose()
+            if (-not $p.HasExited) { Stop-Process $p }
+            Write-Host "SCREENSHOT-BEGIN $demo $($screen.Width)x$($screen.Height)"
+            $b64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($file))
+            for ($i = 0; $i -lt $b64.Length; $i += 8000) { Write-Host $b64.Substring($i, [Math]::Min(8000, $b64.Length - $i)) }
+            Write-Host "SCREENSHOT-END $demo"
+          }
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.arch == 'x64'
+        with:
+          name: screenshots
+          path: screenshots
+
       - uses: actions/upload-artifact@v4
         with:
           name: StawnCADPro-windows-${{ matrix.arch }}
