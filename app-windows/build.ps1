@@ -8,7 +8,9 @@
 param(
     [ValidateSet("Release", "Debug")] [string]$Configuration = "Release",
     [ValidateSet("auto", "x64", "ARM64")] [string]$Arch = "auto",
-    [switch]$Run
+    [switch]$Run,
+    # Tests cannot run when cross-building ARM64 on an x64 machine (CI).
+    [switch]$SkipTests
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
@@ -24,8 +26,10 @@ cmake -S $root -B $build -G "Visual Studio 17 2022" -A $Arch `
 if ($LASTEXITCODE) { throw "CMake configure failed" }
 cmake --build $build --config $Configuration --parallel
 if ($LASTEXITCODE) { throw "Core build failed" }
-ctest --test-dir $build -C $Configuration --output-on-failure
-if ($LASTEXITCODE) { throw "Core tests failed" }
+if (-not $SkipTests) {
+    ctest --test-dir $build -C $Configuration --output-on-failure
+    if ($LASTEXITCODE) { throw "Core tests failed" }
+}
 
 # stawn.dll plus the OpenCascade and TBB DLLs vcpkg copied next to it.
 $native = Join-Path $build "native"
