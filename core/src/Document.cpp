@@ -477,14 +477,15 @@ RebuildResult PartDocument::rebuild() {
     RebuildResult result;
     shape_.Nullify();
 
-    // Work on a copy so configuration values never leak into the stored model.
+    // Work on a copy so configuration values never leak into the stored model. Errors are
+    // cleared first so a failure from the last rebuild cannot carry over into this one.
+    for (auto& f : features) f.error.clear();
     std::vector<Feature> work = features;
     if (auto* c = activeConfig())
         for (auto& [k, v] : c->dimensions) writeModelDimension(work, k, v);
 
     int last = rollbackIndex < 0 ? int(work.size()) : std::min<int>(rollbackIndex, int(work.size()));
     TopoDS_Shape body;
-    for (auto& f : features) f.error.clear();
 
     for (int i = 0; i < last; ++i) {
         Feature& f = work[i];

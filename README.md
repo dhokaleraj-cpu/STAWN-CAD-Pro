@@ -23,6 +23,13 @@ feature-tree workflow: sketch, feature, configuration, custom properties, drawin
   sheet with zones, revision table, title block filled from custom properties, general
   notes, overall dimensions, first or third angle. Export to PDF, DXF and SVG.
 
+**Command API, MCP server and SolidWorks bridge**
+- 37 JSON commands for sketching, features, configurations, properties and export
+  (`docs/COMMANDS.md`), available from `stawn-cli run`, the C API and an MCP server
+  (`tools/stawn_mcp`) so Claude can build parts in STAWN directly.
+- `tools/solidworks_bridge`: a Windows script that exports SolidWorks parts to STEP per
+  configuration with their properties, and `stawn-cli migrate` to turn them into STAWN parts.
+
 **macOS app (SwiftUI, SceneKit viewport)**
 - Welcome window with New, Sample Shaft, Open and Recent.
 - CommandManager tabs, Feature Tree, Property panel with dimension editing, Configuration
@@ -66,6 +73,8 @@ core/src             C++ implementation
 core/capi            C interface used by Swift (stawn_c.h)
 core/tests           doctest unit tests
 tools/stawn_cli.cpp  command line tool
+tools/stawn_mcp      MCP server for Claude
+tools/solidworks_bridge  SolidWorks export for migration (Windows)
 app/StawnCADPro      SwiftUI macOS app
 templates            custom property templates (.stprp.json)
 examples             sample parts

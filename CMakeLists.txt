@@ -26,12 +26,19 @@ add_library(stawn_core
     core/src/Mesh.cpp
     core/src/Samples.cpp
     core/src/Drawing.cpp
+    core/src/Commands.cpp
+    core/src/Migration.cpp
     core/capi/stawn_c.cpp)
 target_include_directories(stawn_core PUBLIC core/include core/capi ${OpenCASCADE_INCLUDE_DIR})
 target_link_libraries(stawn_core PUBLIC ${STAWN_OCCT_LIBS} Eigen3::Eigen nlohmann_json::nlohmann_json)
 if(NOT MSVC)
     target_compile_options(stawn_core PRIVATE -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -Wno-deprecated-declarations)
 endif()
+
+# Shared library for scripting hosts such as the Python MCP server (loads it with ctypes).
+add_library(stawn SHARED core/capi/stawn_c.cpp)
+target_link_libraries(stawn PRIVATE stawn_core)
+set_target_properties(stawn PROPERTIES OUTPUT_NAME stawn)
 
 add_executable(stawn-cli tools/stawn_cli.cpp)
 target_link_libraries(stawn-cli PRIVATE stawn_core)
@@ -44,7 +51,9 @@ if(BUILD_TESTING)
         core/tests/sketch_tests.cpp
         core/tests/document_tests.cpp
         core/tests/drawing_tests.cpp
-        core/tests/capi_tests.cpp)
+        core/tests/capi_tests.cpp
+        core/tests/command_tests.cpp
+        core/tests/migration_tests.cpp)
     target_link_libraries(stawn_tests PRIVATE stawn_core doctest::doctest)
     add_test(NAME stawn_tests COMMAND stawn_tests)
 endif()

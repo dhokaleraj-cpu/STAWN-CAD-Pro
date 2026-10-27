@@ -3,6 +3,9 @@
 //   stawn-cli sample <out.stprt>                  write the sample 8 mm shaft
 //   stawn-cli info <part.stprt> [configuration]   rebuild and print features, mass and properties
 //   stawn-cli set <part.stprt> D1@Sketch1=4.5 ... change dimensions and save
+//   stawn-cli run <script.json> [out.stprt]       run command API script (docs/COMMANDS.md)
+//   stawn-cli commands                            list the command API
+//   stawn-cli migrate <manifest.json> <out.stprt> build a part from the SolidWorks export bridge
 //   stawn-cli import <in.step> <out.stprt>        make a part from a STEP file
 //   stawn-cli export <part.stprt> <out.step|out.stl> [configuration]
 //   stawn-cli drawing <part.stprt> <out.pdf|out.dxf|out.svg> [paper] [configuration]
@@ -10,8 +13,13 @@
 #include <iostream>
 #include <string>
 
+#include <fstream>
+#include <sstream>
+
+#include "stawn/Commands.hpp"
 #include "stawn/Document.hpp"
 #include "stawn/Drawing.hpp"
+#include "stawn/Migration.hpp"
 #include "stawn/Samples.hpp"
 
 using namespace stawn;
@@ -23,6 +31,9 @@ int usage() {
                  "  stawn-cli sample <out.stprt>\n"
                  "  stawn-cli info <part.stprt> [configuration]\n"
                  "  stawn-cli set <part.stprt> NAME=VALUE...\n"
+                 "  stawn-cli run <script.json> [out.stprt]\n"
+                 "  stawn-cli commands\n"
+                 "  stawn-cli migrate <manifest.json> <out.stprt>\n"
                  "  stawn-cli import <in.step> <out.stprt>\n"
                  "  stawn-cli export <part.stprt> <out.step|out.stl> [configuration]\n"
                  "  stawn-cli drawing <part.stprt> <out.pdf|out.dxf|out.svg> [paper] [configuration]\n";
@@ -55,8 +66,35 @@ std::unique_ptr<PartDocument> open(const std::string& path, const char* configur
 }  // namespace
 
 int main(int argc, char** argv) {
+    if (argc >= 2 && std::string(argv[1]) == "commands") {
+        std::cout << CommandSession::describe().dump(2) << "\n";
+        return 0;
+    }
     if (argc < 3) return usage();
     std::string cmd = argv[1];
+
+    if (cmd == "run") {
+        std::ifstream in(argv[2]);
+        if (!in) {
+            std::cerr << "Cannot open " << argv[2] << "\n";
+            return 1;
+        }
+        std::stringstream ss;
+        ss << in.rdbuf();
+        nlohmann::json script;
+        try {
+            script = nlohmann::json::parse(ss.str());
+        } catch (const std::exception& e) {
+            std::cerr << "Invalid JSON: " << e.what() << "\n";
+            return 1;
+        }
+        CommandSession session;
+        nlohmann::json results = script.is_array() ? session.run(script) : nlohmann::json::array({session.execute(script)});
+        std::cout << results.dump(2) << "\n";
+        bool ok = !results.empty() && results.back().value("ok", false) && results.size() == (script.is_array() ? script.size() : 1);
+        if (ok && argc > 3 && !session.document().save(argv[3])) return 1;
+        return ok ? 0 : 1;
+    }
 
     if (cmd == "sample") {
         auto doc = makeSampleShaft();
@@ -105,6 +143,21 @@ int main(int argc, char** argv) {
             return 1;
         }
         return doc->save(argv[2]) ? 0 : 1;
+    }
+
+    if (cmd == "migrate" && argc >= 4) {
+        std::string err;
+        auto doc = partFromManifest(argv[2], &err);
+        if (!doc) {
+            std::cerr << err << "\n";
+            return 1;
+        }
+        RebuildResult r = doc->rebuild();
+        for (auto& e : r.errors) std::cerr << "rebuild error: " << e << "\n";
+        if (!doc->save(argv[3])) return 1;
+        std::printf("Wrote %s: %zu configuration(s), %.3f g in %s\n", argv[3], doc->configurations.size(),
+                    doc->massProperties().mass, doc->activeConfiguration.c_str());
+        return r.ok ? 0 : 1;
     }
 
     if (cmd == "import" && argc >= 4) {

@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "stawn/Commands.hpp"
 #include "stawn/Document.hpp"
 #include "stawn/Drawing.hpp"
 #include "stawn/Json.hpp"
@@ -14,6 +15,7 @@ using namespace stawn;
 
 struct StawnDoc {
     std::unique_ptr<PartDocument> doc;
+    std::unique_ptr<CommandSession> session;  // created on the first command
 };
 
 namespace {
@@ -189,6 +191,20 @@ char* stawn_material_library(void) {
     for (auto& m : materialLibrary()) j.push_back({{"name", m.name}, {"density", m.density}});
     return dup(j.dump());
 }
+
+char* stawn_doc_execute(StawnDoc* d, const char* commandJson) {
+    if (!d->session) d->session = std::make_unique<CommandSession>(&d->doc);
+    json command;
+    try {
+        command = json::parse(commandJson);
+    } catch (const std::exception& e) {
+        return dup(json{{"ok", false}, {"error", std::string("invalid JSON: ") + e.what()}}.dump());
+    }
+    json result = command.is_array() ? d->session->run(command) : d->session->execute(command);
+    return dup(result.dump());
+}
+
+char* stawn_commands_describe(void) { return dup(CommandSession::describe().dump()); }
 
 void stawn_free_string(char* s) { std::free(s); }
 

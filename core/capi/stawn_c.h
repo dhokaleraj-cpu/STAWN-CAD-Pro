@@ -72,6 +72,12 @@ char* stawn_sketch_solve(const char* sketchJson);
 /* JSON array of {"name", "density"} from the material library. */
 char* stawn_material_library(void);
 
+/* Runs one command object, or an array of commands, from the command API (docs/COMMANDS.md)
+ * and returns the JSON result. */
+char* stawn_doc_execute(StawnDoc* doc, const char* commandJson);
+/* JSON list of every command with its parameters. */
+char* stawn_commands_describe(void);
+
 void stawn_free_string(char* s);
 
 #ifdef __cplusplus
