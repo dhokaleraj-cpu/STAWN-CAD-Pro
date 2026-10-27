@@ -227,6 +227,18 @@ public sealed class PartModel : IDisposable
         return result;
     }
 
+    /// <summary>
+    /// Runs one command without rebuilding the part, for the many small steps of interactive
+    /// sketching (sketch_input, get_sketch). Call <see cref="Refresh"/> when the sketch closes.
+    /// </summary>
+    public JsonObject Command(JsonObject command)
+    {
+        var result = StawnNative.Take(StawnNative.stawn_doc_execute(_handle, command.ToJsonString())) ?? "{}";
+        var reply = JsonNode.Parse(result) as JsonObject ?? new JsonObject();
+        if (reply["changed"]?.GetValue<bool>() == true) IsDirty = true;
+        return reply;
+    }
+
     // Files and output
 
     public bool Save(string path)

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -30,7 +31,12 @@ public sealed partial class MainWindow : Window
         Welcome.NewPart += () => Load(PartModel.Empty());
         Welcome.OpenSample += () => Load(PartModel.SampleShaft());
         Welcome.OpenPart += () => _ = OpenAsync();
-        FeatureTreePanel.EditFeature += _ => ManagerTabs.SelectedItem = PropertyTab;
+        FeatureTreePanel.EditFeature += name =>
+        {
+            if (_model?.FeatureList.FirstOrDefault(f => f.Name == name).Type == "Sketch") EditSketch(name);
+            else ManagerTabs.SelectedItem = PropertyTab;
+        };
+        SketchView.EditorChanged += OnSketchEditorChanged;
         Closed += (_, _) => _model?.Dispose();
         if (model != null) Load(model); else ShowWelcome();
     }
@@ -46,6 +52,7 @@ public sealed partial class MainWindow : Window
 
     private void Load(PartModel model)
     {
+        LeaveSketchMode();
         _model?.Dispose();
         _model = model;
         Welcome.Visibility = Visibility.Collapsed;
@@ -62,7 +69,7 @@ public sealed partial class MainWindow : Window
 
     private void OnModelChanged()
     {
-        if (_model == null) return;
+        if (_model == null || InSketch) return;
         View3D.SetMesh(_model.Mesh);
         FeatureTreePanel.Refresh();
         PropertyPanel.Refresh();
@@ -89,20 +96,43 @@ public sealed partial class MainWindow : Window
 
     private void BuildCommandManager()
     {
-        AddButton(FeaturesBar, "Extruded Boss/Base", "", () => RunCommands(Examples.Extrude));
-        AddButton(FeaturesBar, "Revolved Boss/Base", "", () => RunCommands(Examples.Revolve));
-        AddButton(FeaturesBar, "Extruded Cut", "", () => RunCommands(Examples.CutExtrude));
-        AddButton(FeaturesBar, "Revolved Cut", "", () => RunCommands(Examples.CutRevolve));
+        AddButton(FeaturesBar, "Extruded Boss/Base", "", () => _ = ExtrudeAsync(false));
+        AddButton(FeaturesBar, "Revolved Boss/Base", "", () => _ = RevolveAsync(false));
+        AddButton(FeaturesBar, "Extruded Cut", "", () => _ = ExtrudeAsync(true));
+        AddButton(FeaturesBar, "Revolved Cut", "", () => _ = RevolveAsync(true));
         FeaturesBar.PrimaryCommands.Add(new AppBarSeparator());
         AddButton(FeaturesBar, "Fillet", "", () => _ = EdgeFeatureAsync("fillet"));
         AddButton(FeaturesBar, "Chamfer", "", () => _ = EdgeFeatureAsync("chamfer"));
         FeaturesBar.PrimaryCommands.Add(new AppBarSeparator());
         AddButton(FeaturesBar, "Import STEP", "", () => _ = ImportStepAsync());
 
-        foreach (var (label, glyph) in new[] { ("Line", ""), ("Centerline", ""), ("Rectangle", ""),
-                                                ("Circle", ""), ("Arc", ""), ("Polygon", ""),
-                                                ("Smart Dimension", ""), ("Add Relation", "") })
-            AddButton(SketchBar, label, glyph, () => RunCommands(Examples.Sketch));
+        var sketch = new AppBarButton { Label = "Sketch", Icon = new FontIcon { Glyph = "\uE70F" } };
+        var planes = new MenuFlyout();
+        foreach (var plane in new[] { "Front", "Top", "Right" })
+        {
+            var item = new MenuFlyoutItem { Text = $"{plane} Plane" };
+            item.Click += (_, _) => StartSketch(plane);
+            planes.Items.Add(item);
+        }
+        planes.Items.Add(new MenuFlyoutSeparator());
+        var editSelected = new MenuFlyoutItem { Text = "Edit Selected Sketch" };
+        editSelected.Click += (_, _) => { if (SelectedSketch() is { } name) EditSketch(name); };
+        planes.Items.Add(editSelected);
+        planes.Opening += (_, _) => editSelected.IsEnabled = SelectedSketch() != null;
+        sketch.Flyout = planes;
+        ToolTipService.SetToolTip(sketch, "Sketch on a plane, or edit the selected sketch");
+        SketchBar.PrimaryCommands.Add(sketch);
+        AddButton(SketchBar, "Exit Sketch", "\uE8FB", ExitSketch);
+        SketchBar.PrimaryCommands.Add(new AppBarSeparator());
+        foreach (var (label, glyph, tool) in new[] { ("Select", "\uE8B0", "select"), ("Line", "\uE7B5", "line"),
+                                                     ("Centerline", "\uE738", "centerline"), ("Rectangle", "\uE739", "rectangle"),
+                                                     ("Circle", "\uEA3A", "circle"), ("Arc", "\uE7AD", "arc"),
+                                                     ("Smart Dimension", "\uE7C0", "dimension") })
+            AddButton(SketchBar, label, glyph, () =>
+            {
+                if (InSketch) SketchView.SetTool(tool);
+                else _ = Dialogs.MessageAsync(Root, label, "Start a sketch first: Sketch > Front, Top or Right Plane, or edit a sketch from the feature tree.");
+            });
 
         AddButton(EvaluateBar, "Mass Properties", "", () => _ = ShowMassPropertiesAsync());
         AddButton(EvaluateBar, "Rebuild", "", () => _model?.Refresh());
@@ -243,7 +273,140 @@ public sealed partial class MainWindow : Window
         if (path != null && !export(_model, path)) await Dialogs.MessageAsync(Root, "Export failed", $"Could not export {kind} to {path}.");
     }
 
+    // Sketch mode
+
+    private bool InSketch => SketchView.Visibility == Visibility.Visible;
+
+    private string? SelectedSketch() =>
+        _model?.SelectedFeature is { } f && _model.FeatureList.FirstOrDefault(x => x.Name == f).Type == "Sketch" ? f : null;
+
+    private void StartSketch(string plane)
+    {
+        if (_model == null) return;
+        if (InSketch) ExitSketch();
+        var reply = _model.Command(new JsonObject { ["op"] = "create_sketch", ["plane"] = plane });
+        if (reply["sketch"]?.GetValue<string>() is { } name) EditSketch(name);
+    }
+
+    private void EditSketch(string name)
+    {
+        if (_model == null) return;
+        if (InSketch) ExitSketch();
+        var state = _model.Command(new JsonObject { ["op"] = "edit_sketch", ["sketch"] = name });
+        if (state["ok"]?.GetValue<bool>() != true) return;
+        _model.Refresh();  // shows a new sketch in the feature tree
+        _model.Select(name);
+        View3D.Visibility = Visibility.Collapsed;
+        HeadsUp.Visibility = Visibility.Collapsed;
+        SketchView.Visibility = Visibility.Visible;
+        SketchPanel.Visibility = Visibility.Visible;
+        SketchView.Open(_model, state);
+        CommandManager.SelectedIndex = 1;
+        SketchView.SetTool("line");
+    }
+
+    /// <summary>Closes the sketch and rebuilds the part, so features that use it update.</summary>
+    private void ExitSketch()
+    {
+        if (_model == null || !InSketch) return;
+        _model.Command(new JsonObject { ["op"] = "close_sketch" });
+        LeaveSketchMode();
+        _model.Refresh();
+    }
+
+    private void LeaveSketchMode()
+    {
+        SketchView.Visibility = Visibility.Collapsed;
+        SketchPanel.Visibility = Visibility.Collapsed;
+        View3D.Visibility = Visibility.Visible;
+        HeadsUp.Visibility = Visibility.Visible;
+    }
+
+    private bool _modifyOpen;
+
+    private async void OnSketchEditorChanged(string ev, JsonObject state)
+    {
+        SketchPrompt.Text = state["prompt"]?.GetValue<string>() ?? "";
+        StatusLeft.Text = $"Editing {SketchView.SketchName}  ·  {SketchPrompt.Text}";
+        int dof = SketchView.DegreesOfFreedom;
+        StatusRight.Text = SketchView.Status == "Under Defined" ? $"Under Defined ({dof} free)" : SketchView.Status;
+
+        RelationButtons.Children.Clear();
+        var relations = (state["relations"] as JsonArray ?? new JsonArray()).Select(r => r!.GetValue<string>()).ToList();
+        if (relations.Count > 0) RelationButtons.Children.Add(new TextBlock { Text = "Add Relation:", VerticalAlignment = VerticalAlignment.Center });
+        for (int i = 0; i < relations.Count; i++)
+        {
+            int index = i;
+            var b = new Button { Content = relations[i] };
+            b.Click += (_, _) => SketchView.AddRelation(index);
+            RelationButtons.Children.Add(b);
+        }
+
+        // Smart Dimension: ask for the value as soon as the geometry is picked.
+        if (ev == "click" && !_modifyOpen && state["dimension_request"] is JsonObject request)
+        {
+            _modifyOpen = true;
+            try
+            {
+                if (await Dialogs.DimensionAsync(Root, request) is { } d) SketchView.AddDimension(d.Option, d.Value);
+                else SketchView.Escape();
+            }
+            finally { _modifyOpen = false; }
+        }
+    }
+
     // Features and tools
+
+    /// <summary>The sketch a feature uses: the open one, else the selected one, else the last one.</summary>
+    private string? FeatureSketch()
+    {
+        if (InSketch) return SketchView.SketchName;
+        if (SelectedSketch() is { } s) return s;
+        return _model?.FeatureList.LastOrDefault(f => f.Type == "Sketch").Name;
+    }
+
+    private async Task ExtrudeAsync(bool cut)
+    {
+        if (_model == null) return;
+        var title = cut ? "Extruded Cut" : "Extruded Boss/Base";
+        if (FeatureSketch() is not { } sketch)
+        {
+            await Dialogs.MessageAsync(Root, title, "Draw a closed sketch first (Sketch tab).");
+            return;
+        }
+        if (await Dialogs.ExtrudeAsync(Root, cut, sketch) is not { } e) return;
+        ExitSketch();
+        var reply = _model.Command(new JsonObject
+        {
+            ["op"] = cut ? "cut_extrude" : "extrude", ["sketch"] = sketch, ["depth"] = e.Depth, ["mid_plane"] = e.MidPlane, ["reverse"] = e.Reverse,
+        });
+        await AfterFeatureAsync(reply, title);
+    }
+
+    private async Task RevolveAsync(bool cut)
+    {
+        if (_model == null) return;
+        var title = cut ? "Revolved Cut" : "Revolved Boss/Base";
+        if (FeatureSketch() is not { } sketch)
+        {
+            await Dialogs.MessageAsync(Root, title, "Draw a closed sketch with a centerline first (Sketch tab).");
+            return;
+        }
+        if (await Dialogs.RevolveAsync(Root, cut, sketch) is not { } angle) return;
+        ExitSketch();
+        var reply = _model.Command(new JsonObject { ["op"] = cut ? "cut_revolve" : "revolve", ["sketch"] = sketch, ["angle"] = angle });
+        await AfterFeatureAsync(reply, title);
+    }
+
+    private async Task AfterFeatureAsync(JsonObject reply, string title)
+    {
+        _model?.Refresh();
+        if (reply["ok"]?.GetValue<bool>() != true)
+            await Dialogs.MessageAsync(Root, title, reply["error"]?.GetValue<string>() ?? reply.ToJsonString());
+        else if (reply["rebuild_ok"]?.GetValue<bool>() == false)
+            await Dialogs.MessageAsync(Root, title, string.Join("\n", (reply["rebuild_errors"] as JsonArray ?? new()).Select(x => x?.ToString())));
+    }
+
 
     private void RunCommands(string example)
     {

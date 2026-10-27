@@ -60,6 +60,61 @@ public static class Dialogs
         return (size.Value, new[] { "all", "circular", "linear" }[Math.Max(0, edges.SelectedIndex)]);
     }
 
+    /// <summary>Smart Dimension's Modify box: which measurement (when there is a choice) and its value.</summary>
+    public static async Task<(int Option, double Value)?> DimensionAsync(UIElement owner, System.Text.Json.Nodes.JsonObject request)
+    {
+        var options = (request["options"] as System.Text.Json.Nodes.JsonArray ?? new()).OfType<System.Text.Json.Nodes.JsonObject>().ToList();
+        if (options.Count == 0) return null;
+        string Unit(int i) => options[i]["unit"]?.GetValue<string>() == "deg" ? "°" : "mm";
+        var value = new NumberBox { Value = options[0]["value"]!.GetValue<double>(), Header = $"Value ({Unit(0)})",
+                                    SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline, SmallChange = 1 };
+        value.Loaded += (_, _) => value.Focus(FocusState.Programmatic);
+        var panel = new StackPanel { Spacing = 12, Width = 300 };
+        RadioButtons? kinds = null;
+        if (options.Count > 1)
+        {
+            kinds = new RadioButtons { Header = "Dimension", ItemsSource = options.Select(o => o["label"]!.GetValue<string>()).ToList(), SelectedIndex = 0 };
+            kinds.SelectionChanged += (_, _) =>
+            {
+                int i = Math.Max(0, kinds.SelectedIndex);
+                value.Value = options[i]["value"]!.GetValue<double>();
+                value.Header = $"Value ({Unit(i)})";
+            };
+            panel.Children.Add(kinds);
+        }
+        panel.Children.Add(value);
+        if (await Dialog(owner, "Modify", panel).ShowAsync() != ContentDialogResult.Primary || double.IsNaN(value.Value)) return null;
+        return (Math.Max(0, kinds?.SelectedIndex ?? 0), value.Value);
+    }
+
+    /// <summary>Extrude PropertyManager: Blind depth, Mid Plane and Reverse Direction.</summary>
+    public static async Task<(double Depth, bool MidPlane, bool Reverse)?> ExtrudeAsync(UIElement owner, bool cut, string sketch)
+    {
+        var depth = new NumberBox { Header = "Depth (mm)", Value = 10, Minimum = 0.001, SmallChange = 1,
+                                    SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline };
+        var condition = new RadioButtons { Header = "End Condition", ItemsSource = new[] { "Blind", "Mid Plane" }, SelectedIndex = 0 };
+        var reverse = new CheckBox { Content = "Reverse Direction" };
+        var panel = new StackPanel { Spacing = 12, Width = 320 };
+        panel.Children.Add(new TextBlock { Text = $"Sketch: {sketch}" });
+        panel.Children.Add(condition);
+        panel.Children.Add(depth);
+        panel.Children.Add(reverse);
+        if (await Dialog(owner, cut ? "Cut-Extrude" : "Boss-Extrude", panel).ShowAsync() != ContentDialogResult.Primary || double.IsNaN(depth.Value)) return null;
+        return (depth.Value, condition.SelectedIndex == 1, reverse.IsChecked == true);
+    }
+
+    /// <summary>Revolve PropertyManager: the angle about the sketch's first centerline.</summary>
+    public static async Task<double?> RevolveAsync(UIElement owner, bool cut, string sketch)
+    {
+        var angle = new NumberBox { Header = "Angle (°)", Value = 360, Minimum = 0.1, Maximum = 360, SmallChange = 15,
+                                    SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline };
+        var panel = new StackPanel { Spacing = 12, Width = 320 };
+        panel.Children.Add(new TextBlock { Text = $"Sketch: {sketch}\nAxis of revolution: the sketch's first centerline", TextWrapping = TextWrapping.Wrap });
+        panel.Children.Add(angle);
+        if (await Dialog(owner, cut ? "Cut-Revolve" : "Revolve", panel).ShowAsync() != ContentDialogResult.Primary || double.IsNaN(angle.Value)) return null;
+        return angle.Value;
+    }
+
     public static async Task<(string Name, double Density)?> MaterialAsync(UIElement owner, string current)
     {
         var library = PartModel.MaterialLibrary();

@@ -45,5 +45,22 @@ edits and mass properties, ConfigurationManager, template-driven custom properti
 3D view with orbit/pan/zoom, standard views and display styles, drawing preview and PDF/DXF/SVG
 export, Fillet/Chamfer dialogs and a Run Commands dialog for the command API.
 
-Next: interactive sketcher and feature PropertyManagers (shared design with the Mac app), and a
-Direct3D 11 viewport with picking to replace the Win2D painter's renderer.
+Sketching: Sketch > Front, Top or Right Plane (or double-click a sketch in the tree) opens the
+sketch normal to its plane. Line, Centerline, Rectangle, Circle, Arc and Smart Dimension snap to
+existing points and infer horizontal and vertical; select geometry (Ctrl to add) for the Add
+Relation choices; Delete removes it, Esc ends the tool. Free geometry is blue, defined black.
+Extruded Boss/Base, Extruded Cut and the Revolve commands use the open, selected or last sketch.
+The sketch logic lives in the core (`SketchEditor`, the `sketch_input` command), shared with the
+Mac app.
+
+Next: the same sketch mode in the Mac app, and a Direct3D 11 viewport with picking to replace
+the Win2D painter's renderer.
+
+## Running a downloaded build
+
+Extract the whole zip (right-click > Extract All) and run `StawnCADPro.exe` from the extracted
+folder; it does not run from inside the zip. .NET and the Visual C++ runtime are included, so
+nothing needs installing. The app is not code-signed yet, so SmartScreen may say "Windows
+protected your PC": choose More info > Run anyway. Use the ARM64 build on ARM PCs (Windows in
+Parallels on an Apple silicon Mac) and x64 otherwise. If it fails to start, the reason is shown
+and saved to `%LOCALAPPDATA%\STAWN CAD Pro\crash.log`.

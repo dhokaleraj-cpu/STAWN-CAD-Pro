@@ -101,6 +101,15 @@
             <!-- Graphics area with the heads-up view toolbar -->
             <Grid Grid.Column="1">
                 <views:Viewport x:Name="View3D" />
+                <!-- Sketch mode: normal to the sketch plane, with the prompt and relation choices -->
+                <views:SketchCanvas x:Name="SketchView" Visibility="Collapsed" />
+                <Border x:Name="SketchPanel" Visibility="Collapsed" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                        Margin="12" Padding="12,8" CornerRadius="8" Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}">
+                    <StackPanel Spacing="6">
+                        <TextBlock x:Name="SketchPrompt" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <StackPanel x:Name="RelationButtons" Orientation="Horizontal" Spacing="6" />
+                    </StackPanel>
+                </Border>
                 <Border HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,8,0,0" Padding="10,2"
                         CornerRadius="16" Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}">
                     <StackPanel x:Name="HeadsUp" Orientation="Horizontal" Spacing="2" />
