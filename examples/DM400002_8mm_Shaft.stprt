@@ -1,0 +1,401 @@
+{
+  "activeConfiguration": "Finish Grinding",
+  "configurations": [
+    {
+      "bomPartNumber": "",
+      "description": "Finish Grinding",
+      "dimensions": {},
+      "name": "Finish Grinding",
+      "properties": {},
+      "suppressed": []
+    },
+    {
+      "bomPartNumber": "",
+      "description": "Forging",
+      "dimensions": {
+        "D2@Sketch1": 4.3,
+        "D4@Sketch1": 4.3
+      },
+      "name": "Forging",
+      "properties": {},
+      "suppressed": [
+        "Chamfer1",
+        "Fillet1"
+      ]
+    }
+  ],
+  "features": [
+    {
+      "name": "Sketch1",
+      "plane": "Front",
+      "sketch": {
+        "arcs": [],
+        "circles": [],
+        "constraints": [
+          {
+            "a": 0,
+            "b": -1,
+            "kindA": "line",
+            "kindB": "point",
+            "type": "vertical"
+          },
+          {
+            "a": 1,
+            "b": -1,
+            "kindA": "line",
+            "kindB": "point",
+            "type": "horizontal"
+          },
+          {
+            "a": 2,
+            "b": -1,
+            "kindA": "line",
+            "kindB": "point",
+            "type": "vertical"
+          },
+          {
+            "a": 3,
+            "b": -1,
+            "kindA": "line",
+            "kindB": "point",
+            "type": "horizontal"
+          },
+          {
+            "a": 4,
+            "b": -1,
+            "kindA": "line",
+            "kindB": "point",
+            "type": "vertical"
+          },
+          {
+            "a": 5,
+            "b": -1,
+            "kindA": "line",
+            "kindB": "point",
+            "type": "horizontal"
+          },
+          {
+            "a": 6,
+            "b": -1,
+            "kindA": "line",
+            "kindB": "point",
+            "type": "vertical"
+          },
+          {
+            "a": 7,
+            "b": -1,
+            "kindA": "line",
+            "kindB": "point",
+            "type": "horizontal"
+          },
+          {
+            "a": 8,
+            "b": -1,
+            "kindA": "line",
+            "kindB": "point",
+            "type": "vertical"
+          },
+          {
+            "a": 9,
+            "b": -1,
+            "kindA": "line",
+            "kindB": "point",
+            "type": "horizontal"
+          },
+          {
+            "a": 10,
+            "b": -1,
+            "kindA": "line",
+            "kindB": "point",
+            "type": "vertical"
+          },
+          {
+            "a": 11,
+            "b": -1,
+            "kindA": "line",
+            "kindB": "point",
+            "type": "horizontal"
+          },
+          {
+            "a": 0,
+            "b": 1,
+            "kindA": "point",
+            "kindB": "point",
+            "name": "D1",
+            "type": "verticalDistance",
+            "value": 2.0
+          },
+          {
+            "a": 0,
+            "b": 3,
+            "kindA": "point",
+            "kindB": "point",
+            "name": "D2",
+            "type": "verticalDistance",
+            "value": 4.0
+          },
+          {
+            "a": 0,
+            "b": 5,
+            "kindA": "point",
+            "kindB": "point",
+            "name": "D3",
+            "type": "verticalDistance",
+            "value": 3.0
+          },
+          {
+            "a": 0,
+            "b": 7,
+            "kindA": "point",
+            "kindB": "point",
+            "name": "D4",
+            "type": "verticalDistance",
+            "value": 4.0
+          },
+          {
+            "a": 0,
+            "b": 9,
+            "kindA": "point",
+            "kindB": "point",
+            "name": "D5",
+            "type": "verticalDistance",
+            "value": 2.0
+          },
+          {
+            "a": 0,
+            "b": 2,
+            "kindA": "point",
+            "kindB": "point",
+            "name": "D6",
+            "type": "horizontalDistance",
+            "value": 6.75
+          },
+          {
+            "a": 0,
+            "b": 4,
+            "kindA": "point",
+            "kindB": "point",
+            "name": "D7",
+            "type": "horizontalDistance",
+            "value": 15.3
+          },
+          {
+            "a": 0,
+            "b": 6,
+            "kindA": "point",
+            "kindB": "point",
+            "name": "D8",
+            "type": "horizontalDistance",
+            "value": 31.6
+          },
+          {
+            "a": 0,
+            "b": 8,
+            "kindA": "point",
+            "kindB": "point",
+            "name": "D9",
+            "type": "horizontalDistance",
+            "value": 40.15
+          },
+          {
+            "a": 0,
+            "b": 10,
+            "kindA": "point",
+            "kindB": "point",
+            "name": "D10",
+            "type": "horizontalDistance",
+            "value": 46.9
+          }
+        ],
+        "lines": [
+          {
+            "construction": false,
+            "p1": 0,
+            "p2": 1
+          },
+          {
+            "construction": false,
+            "p1": 1,
+            "p2": 2
+          },
+          {
+            "construction": false,
+            "p1": 2,
+            "p2": 3
+          },
+          {
+            "construction": false,
+            "p1": 3,
+            "p2": 4
+          },
+          {
+            "construction": false,
+            "p1": 4,
+            "p2": 5
+          },
+          {
+            "construction": false,
+            "p1": 5,
+            "p2": 6
+          },
+          {
+            "construction": false,
+            "p1": 6,
+            "p2": 7
+          },
+          {
+            "construction": false,
+            "p1": 7,
+            "p2": 8
+          },
+          {
+            "construction": false,
+            "p1": 8,
+            "p2": 9
+          },
+          {
+            "construction": false,
+            "p1": 9,
+            "p2": 10
+          },
+          {
+            "construction": false,
+            "p1": 10,
+            "p2": 11
+          },
+          {
+            "construction": false,
+            "p1": 11,
+            "p2": 0
+          }
+        ],
+        "points": [
+          {
+            "fixed": true,
+            "x": 0.0,
+            "y": 0.0
+          },
+          {
+            "fixed": false,
+            "x": 0.3,
+            "y": 2.2
+          },
+          {
+            "fixed": false,
+            "x": 7.05,
+            "y": 2.2
+          },
+          {
+            "fixed": false,
+            "x": 7.05,
+            "y": 4.2
+          },
+          {
+            "fixed": false,
+            "x": 15.600000000000001,
+            "y": 4.2
+          },
+          {
+            "fixed": false,
+            "x": 15.600000000000001,
+            "y": 3.2
+          },
+          {
+            "fixed": false,
+            "x": 31.900000000000002,
+            "y": 3.2
+          },
+          {
+            "fixed": false,
+            "x": 31.900000000000002,
+            "y": 4.2
+          },
+          {
+            "fixed": false,
+            "x": 40.449999999999996,
+            "y": 4.2
+          },
+          {
+            "fixed": false,
+            "x": 40.449999999999996,
+            "y": 2.2
+          },
+          {
+            "fixed": false,
+            "x": 47.199999999999996,
+            "y": 2.2
+          },
+          {
+            "fixed": false,
+            "x": 47.199999999999996,
+            "y": 0.2
+          }
+        ]
+      },
+      "type": "Sketch"
+    },
+    {
+      "angle": 360.0,
+      "axisLine": 11,
+      "name": "Revolve1",
+      "operation": "boss",
+      "sketchName": "Sketch1",
+      "type": "Revolve"
+    },
+    {
+      "distance": 0.3,
+      "edges": [
+        [
+          0.0,
+          2.0,
+          0.0
+        ],
+        [
+          46.9,
+          2.0,
+          0.0
+        ]
+      ],
+      "name": "Chamfer1",
+      "type": "Chamfer"
+    },
+    {
+      "edges": [
+        [
+          15.3,
+          3.0,
+          0.0
+        ],
+        [
+          31.6,
+          3.0,
+          0.0
+        ]
+      ],
+      "name": "Fillet1",
+      "radius": 0.5,
+      "type": "Fillet"
+    }
+  ],
+  "format": "stawn.part",
+  "material": {
+    "density": 7850.0,
+    "name": "1.7147 (20MnCr5)"
+  },
+  "name": "DM400002_8mm_Shaft",
+  "properties": {
+    "CaseDepth": "0.5-1.0 AT 513 HV1",
+    "CoreHardness": "MAX 40 HRC",
+    "Description": "8mm Shaft",
+    "HeatTreatment": "Case Carburising",
+    "JominyValue": "NA",
+    "Material": "${Material}",
+    "PartName": "${PartName}",
+    "PartNo": "DM400002",
+    "Process": "Carburized",
+    "SurfaceHardness": "MIN 50 HRC",
+    "Weight": "${Mass}"
+  },
+  "units": "MMGS",
+  "version": 1
+}

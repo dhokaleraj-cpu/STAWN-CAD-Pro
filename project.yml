@@ -1,0 +1,86 @@
+# XcodeGen spec for the macOS app. Generate the project with:
+#   brew install xcodegen opencascade eigen nlohmann-json
+#   xcodegen generate && open StawnCADPro.xcodeproj
+name: StawnCADPro
+options:
+  bundleIdPrefix: com.stawnprecision
+  deploymentTarget:
+    macOS: "14.0"
+settings:
+  base:
+    MARKETING_VERSION: 0.1.0
+    CURRENT_PROJECT_VERSION: 1
+targets:
+  StawnCADPro:
+    type: application
+    platform: macOS
+    sources:
+      - path: app/StawnCADPro
+      - path: core/src
+      - path: core/capi
+      - path: templates
+        buildPhase: resources
+    info:
+      path: app/StawnCADPro/Info.plist
+      properties:
+        CFBundleDisplayName: STAWN CAD Pro
+        CFBundleName: STAWN CAD Pro
+        LSApplicationCategoryType: public.app-category.graphics-design
+        NSHumanReadableCopyright: Copyright © 2026 STAWN Precision
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: STAWN Part
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Owner
+            LSItemContentTypes: [com.stawnprecision.part]
+            NSDocumentClass: ""
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.stawnprecision.part
+            UTTypeDescription: STAWN Part
+            UTTypeConformsTo: [public.json, public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [stprt]
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: org.iso.step
+            UTTypeDescription: STEP model
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [step, stp]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.stawnprecision.cadpro
+        PRODUCT_NAME: STAWN CAD Pro
+        SWIFT_VERSION: "5.9"
+        SWIFT_OBJC_BRIDGING_HEADER: app/StawnCADPro/StawnCADPro-Bridging-Header.h
+        CLANG_CXX_LANGUAGE_STANDARD: c++17
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_ENTITLEMENTS: app/StawnCADPro/StawnCADPro.entitlements
+        HEADER_SEARCH_PATHS:
+          - $(SRCROOT)/core/include
+          - $(SRCROOT)/core/capi
+          - $(HOMEBREW_PREFIX)/include/opencascade
+          - $(HOMEBREW_PREFIX)/include/eigen3
+          - $(HOMEBREW_PREFIX)/include
+        LIBRARY_SEARCH_PATHS: [$(HOMEBREW_PREFIX)/lib]
+        HOMEBREW_PREFIX: /opt/homebrew
+        GCC_WARN_INHIBIT_ALL_WARNINGS: NO
+        OTHER_CPLUSPLUSFLAGS: [-Wno-deprecated-declarations]
+        OTHER_LDFLAGS:
+          - -lTKernel
+          - -lTKMath
+          - -lTKG2d
+          - -lTKG3d
+          - -lTKGeomBase
+          - -lTKBRep
+          - -lTKGeomAlgo
+          - -lTKTopAlgo
+          - -lTKPrim
+          - -lTKBO
+          - -lTKFillet
+          - -lTKShHealing
+          - -lTKMesh
+          - -lTKHLR
+          - -lTKXSBase
+          - -lTKDE
+          - -lTKDESTEP
+          - -lTKDESTL
+          - -Wl,-rpath,$(HOMEBREW_PREFIX)/lib

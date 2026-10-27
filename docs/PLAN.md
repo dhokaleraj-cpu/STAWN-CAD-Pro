@@ -1,0 +1,14 @@
+# STAWN CAD Pro plan
+
+The full architecture and phased plan lives in the project doc:
+https://claude.ai/artifact/7SReHjvjUbyoZtJYnQrEC9
+
+| Phase | Scope | State |
+|---|---|---|
+| 0 Foundations | Core library, OpenCascade, Swift bridge, viewport, STEP export | Done (STEP import next) |
+| 1 Sketcher | Solver and relations done; interactive sketch editing in the app next | In progress |
+| 2 Part features | Extrude, revolve, cut, fillet, chamfer done; hole, pattern, mirror, shell, draft next | In progress |
+| 3 Configurations and properties | Done in core and app | Done |
+| 4 Drawings | Standard views, title block, PDF/DXF/SVG done; section, detail, GD&T, editable dims next | In progress |
+| 5 Assemblies | Components, mates, BOM | Not started |
+| 6 Breadth | Sheet metal, weldments, surfaces, macros | Not started |

@@ -1,0 +1,46 @@
+{
+  "format": "stawn.propertyTemplate",
+  "version": 1,
+  "name": "Finish Drawing",
+  "appliesTo": "part",
+  "groups": [
+    {
+      "title": "Part Details",
+      "controls": [
+        {"key": "PartNo", "label": "Part Number", "type": "text"},
+        {"key": "PartName", "label": "Part Name", "type": "text", "default": "${PartName}"},
+        {"key": "Description", "label": "Description", "type": "text"},
+        {"key": "Process", "label": "Process / Title", "type": "list",
+         "options": ["Forged", "Machined", "Carburized", "Ground", "Cast"]},
+        {"key": "Material", "label": "Material", "type": "text", "default": "${Material}", "linked": true},
+        {"key": "JominyValue", "label": "Jominy Value", "type": "text"},
+        {"key": "Weight", "label": "Weight (g)", "type": "text", "default": "${Mass}", "linked": true}
+      ]
+    },
+    {
+      "title": "Heat Treatment",
+      "controls": [
+        {"key": "HeatTreatment", "label": "Heat Treatment", "type": "radio",
+         "options": ["Normalise", "Harden & Temper (QT)", "ISO Annealing", "Case Carburising",
+                     "Plasma Nitriding", "Induction Hardening", "Gas Nitriding"]}
+      ]
+    },
+    {
+      "title": "Case Hardening",
+      "controls": [
+        {"key": "CaseDepth", "label": "Case Depth", "type": "text"},
+        {"key": "SurfaceHardness", "label": "Surface Hardness", "type": "text"},
+        {"key": "CoreHardness", "label": "Core Hardness", "type": "text"}
+      ]
+    },
+    {
+      "title": "Approval",
+      "controls": [
+        {"key": "DrawnBy", "label": "Drawn By", "type": "text"},
+        {"key": "CheckedBy", "label": "Checked By", "type": "text"},
+        {"key": "ApprovedBy", "label": "Approved By", "type": "text"},
+        {"key": "ApprovalDate", "label": "Date", "type": "date"}
+      ]
+    }
+  ]
+}
