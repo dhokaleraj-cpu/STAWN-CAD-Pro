@@ -13,6 +13,9 @@
     <!-- Win2D 1.2 lists the old win10-* identifiers; the portable ones above avoid NETSDK1083. -->
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
+    <!-- Needed by unpackaged apps too: it builds StawnCADPro.pri, which holds the compiled XAML
+         (App.xaml and the control templates). Without it windows fail with "XAML parsing failed". -->
+    <EnableMsixTooling>true</EnableMsixTooling>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <!-- Bundle .NET too, so nothing has to be installed before the app runs. -->
     <SelfContained>true</SelfContained>

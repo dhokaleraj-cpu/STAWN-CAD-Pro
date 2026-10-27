@@ -29,7 +29,7 @@ public sealed partial class MainWindow : Window
 
     public MainWindow(PartModel? model)
     {
-        InitializeComponent();
+        BuildLayout();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1600, 960));

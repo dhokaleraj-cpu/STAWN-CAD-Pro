@@ -12,7 +12,7 @@ platforms and `.stprt` files move freely between them.
 | `ManagerPanels.swift`         | `Views/FeatureTree.cs`, `PropertyManagerPanel.cs`, `ConfigurationManagerPanel.cs` |
 | `CustomPropertiesPane.swift`  | `Views/CustomPropertiesPane.cs`          |
 | `DrawingSheet.swift`          | Drawing tab + `Dialogs.DrawingPreviewAsync` |
-| `PartWindow.swift`            | `MainWindow.xaml(.cs)`                   |
+| `PartWindow.swift`            | `MainWindow.cs`, `MainWindow.Layout.cs`  |
 
 ## Requirements
 

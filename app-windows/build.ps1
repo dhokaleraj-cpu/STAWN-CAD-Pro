@@ -54,5 +54,8 @@ if (-not $msbuild) { throw "MSBuild from Visual Studio 2022 was not found." }
 & $msbuild $project -restore -t:Publish -v:minimal "-p:Configuration=$Configuration" "-p:Platform=$Arch" `
     "-p:RuntimeIdentifier=$rid" -p:SelfContained=true "-p:StawnNativeDir=$native" "-p:PublishDir=$out\"
 if ($LASTEXITCODE) { throw "App build failed" }
+if (-not (Test-Path (Join-Path $out "StawnCADPro.pri")) -and -not (Test-Path (Join-Path $out "resources.pri"))) {
+    throw "StawnCADPro.pri is missing from $out: the app's XAML would not load."
+}
 Write-Host "Built $out\StawnCADPro.exe"
 if ($Run) { Start-Process (Join-Path $out "StawnCADPro.exe") }
