@@ -21,7 +21,7 @@ const char* toString(StandardPlane p);
 std::optional<StandardPlane> planeFromString(const std::string& s);
 gp_Ax3 planeAxes(StandardPlane p);
 
-enum class FeatureType { Sketch, Extrude, Revolve, Fillet, Chamfer };
+enum class FeatureType { Sketch, Extrude, Revolve, Fillet, Chamfer, Import };
 const char* toString(FeatureType t);
 
 enum class Operation { Boss, Cut };
@@ -54,6 +54,10 @@ struct Feature {
     // Fillet and chamfer
     double radius = 1;        // fillet radius or chamfer distance (D1@Fillet / D1@Chamfer)
     std::vector<EdgeRef> edges;
+
+    // Import: a body read from a STEP file, stored inside the part as B-rep text
+    std::string sourceFile;
+    std::string brep;
 
     std::string error;        // set when the feature failed to rebuild
 };
@@ -110,6 +114,8 @@ public:
                         Operation op = Operation::Boss, const std::string& name = "");
     Feature& addFillet(std::vector<EdgeRef> edges, double radius, const std::string& name = "");
     Feature& addChamfer(std::vector<EdgeRef> edges, double distance, const std::string& name = "");
+    // Reads a STEP file as an imported body (geometry only, no feature history).
+    Feature* importSTEP(const std::string& path, std::string* error = nullptr);
 
     Feature* feature(const std::string& name);
     const Feature* feature(const std::string& name) const;

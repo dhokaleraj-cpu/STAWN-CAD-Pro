@@ -74,6 +74,7 @@ struct FeatureTree: View {
         case "Extrude": return "square.stack.3d.up.fill"
         case "Fillet": return "circle.bottomhalf.filled"
         case "Chamfer": return "triangle"
+        case "Import": return "shippingbox"
         default: return "questionmark.square"
         }
     }

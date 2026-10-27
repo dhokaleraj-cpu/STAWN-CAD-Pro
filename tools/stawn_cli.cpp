@@ -3,6 +3,7 @@
 //   stawn-cli sample <out.stprt>                  write the sample 8 mm shaft
 //   stawn-cli info <part.stprt> [configuration]   rebuild and print features, mass and properties
 //   stawn-cli set <part.stprt> D1@Sketch1=4.5 ... change dimensions and save
+//   stawn-cli import <in.step> <out.stprt>        make a part from a STEP file
 //   stawn-cli export <part.stprt> <out.step|out.stl> [configuration]
 //   stawn-cli drawing <part.stprt> <out.pdf|out.dxf|out.svg> [paper] [configuration]
 #include <cstdio>
@@ -22,6 +23,7 @@ int usage() {
                  "  stawn-cli sample <out.stprt>\n"
                  "  stawn-cli info <part.stprt> [configuration]\n"
                  "  stawn-cli set <part.stprt> NAME=VALUE...\n"
+                 "  stawn-cli import <in.step> <out.stprt>\n"
                  "  stawn-cli export <part.stprt> <out.step|out.stl> [configuration]\n"
                  "  stawn-cli drawing <part.stprt> <out.pdf|out.dxf|out.svg> [paper] [configuration]\n";
     return 2;
@@ -103,6 +105,22 @@ int main(int argc, char** argv) {
             return 1;
         }
         return doc->save(argv[2]) ? 0 : 1;
+    }
+
+    if (cmd == "import" && argc >= 4) {
+        PartDocument doc;
+        std::string in = argv[2], err;
+        auto slash = in.find_last_of("/\\");
+        std::string base = slash == std::string::npos ? in : in.substr(slash + 1);
+        doc.name = base.substr(0, base.find_last_of('.'));
+        if (!doc.importSTEP(in, &err)) {
+            std::cerr << err << "\n";
+            return 1;
+        }
+        doc.rebuild();
+        if (!doc.save(argv[3])) return 1;
+        std::printf("Wrote %s (volume %.3f mm^3)\n", argv[3], doc.massProperties().volume);
+        return 0;
     }
 
     if (cmd == "export" && argc >= 4) {

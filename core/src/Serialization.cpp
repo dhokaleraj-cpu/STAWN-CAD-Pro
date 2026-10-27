@@ -37,7 +37,7 @@ RefKind refKindFrom(const std::string& s) {
 
 std::optional<FeatureType> featureTypeFrom(const std::string& s) {
     for (auto t : {FeatureType::Sketch, FeatureType::Extrude, FeatureType::Revolve, FeatureType::Fillet,
-                   FeatureType::Chamfer})
+                   FeatureType::Chamfer, FeatureType::Import})
         if (s == toString(t)) return t;
     return std::nullopt;
 }
@@ -131,6 +131,10 @@ std::string PartDocument::toJSON() const {
                 fj["edges"] = json::array();
                 for (auto& e : f.edges) fj["edges"].push_back({e.x, e.y, e.z});
                 break;
+            case FeatureType::Import:
+                fj["sourceFile"] = f.sourceFile;
+                fj["brep"] = f.brep;
+                break;
         }
         j["features"].push_back(fj);
     }
@@ -186,6 +190,10 @@ std::unique_ptr<PartDocument> PartDocument::fromJSON(const std::string& text, st
                 case FeatureType::Chamfer:
                     f.radius = fj.value(f.type == FeatureType::Fillet ? "radius" : "distance", 1.0);
                     for (auto& e : fj.value("edges", json::array())) f.edges.push_back({e.at(0), e.at(1), e.at(2)});
+                    break;
+                case FeatureType::Import:
+                    f.sourceFile = fj.value("sourceFile", "");
+                    f.brep = fj.value("brep", "");
                     break;
             }
             doc->features.push_back(std::move(f));

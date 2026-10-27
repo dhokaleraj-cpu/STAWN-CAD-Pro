@@ -143,6 +143,15 @@ void stawn_mesh_free(StawnMesh* m) {
     std::free(m);
 }
 
+int stawn_doc_import_step(StawnDoc* d, const char* path, char** error) {
+    std::string err;
+    if (!d->doc->importSTEP(path, &err)) {
+        setError(error, err);
+        return 0;
+    }
+    return 1;
+}
+
 int stawn_doc_export_step(StawnDoc* d, const char* path) { return d->doc->exportSTEP(path) ? 1 : 0; }
 int stawn_doc_export_stl(StawnDoc* d, const char* path) { return d->doc->exportSTL(path) ? 1 : 0; }
 

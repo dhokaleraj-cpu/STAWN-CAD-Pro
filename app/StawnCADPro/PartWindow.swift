@@ -145,6 +145,7 @@ struct CommandManager: View {
                     tool("Centerline", "line.3.horizontal.decrease") { notYet("Centerline") }
                 case .evaluate:
                     tool("Mass Properties", "scalemass") { managerTab = .property }
+                    tool("Import STEP", "square.and.arrow.down") { importSTEP() }
                     tool("Export STEP", "square.and.arrow.up") { export(.step) }
                     tool("Export STL", "square.and.arrow.up.on.square") { export(.stl) }
                 case .drawing:
@@ -182,6 +183,13 @@ struct CommandManager: View {
 
     private func notYet(_ name: String) {
         alert = "\(name) editing in the app arrives with the interactive sketcher. The feature already works in the model core and in parts opened from file."
+    }
+
+    private func importSTEP() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "step"), UTType(filenameExtension: "stp")].compactMap { $0 }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        if let error = model.importSTEP(from: url) { alert = error }
     }
 
     private enum ExportKind { case step, stl }

@@ -15,6 +15,9 @@
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepPrimAPI_MakePrism.hxx>
 #include <BRepPrimAPI_MakeRevol.hxx>
+#include <BRepTools.hxx>
+#include <BRep_Builder.hxx>
+#include <STEPControl_Reader.hxx>
 #include <GC_MakeArcOfCircle.hxx>
 #include <Geom_TrimmedCurve.hxx>
 #include <GProp_GProps.hxx>
@@ -75,6 +78,7 @@ const char* toString(FeatureType t) {
         case FeatureType::Revolve: return "Revolve";
         case FeatureType::Fillet: return "Fillet";
         case FeatureType::Chamfer: return "Chamfer";
+        case FeatureType::Import: return "Import";
     }
     return "?";
 }
@@ -170,6 +174,30 @@ Feature& PartDocument::addChamfer(std::vector<EdgeRef> edges, double distance, c
     f.radius = distance;
     features.push_back(std::move(f));
     return features.back();
+}
+
+Feature* PartDocument::importSTEP(const std::string& path, std::string* error) {
+    STEPControl_Reader reader;
+    if (reader.ReadFile(path.c_str()) != IFSelect_RetDone) {
+        if (error) *error = "Cannot read STEP file " + path;
+        return nullptr;
+    }
+    reader.TransferRoots();
+    TopoDS_Shape shape = reader.OneShape();
+    if (shape.IsNull()) {
+        if (error) *error = "The STEP file has no geometry";
+        return nullptr;
+    }
+    std::ostringstream os;
+    BRepTools::Write(shape, os);
+    Feature f;
+    f.type = FeatureType::Import;
+    f.name = uniqueName("Imported");
+    auto slash = path.find_last_of("/\\");
+    f.sourceFile = slash == std::string::npos ? path : path.substr(slash + 1);
+    f.brep = os.str();
+    features.push_back(std::move(f));
+    return &features.back();
 }
 
 Feature* PartDocument::feature(const std::string& n) {
@@ -514,6 +542,15 @@ RebuildResult PartDocument::rebuild() {
                         }
                     }
                 }
+            } else if (f.type == FeatureType::Import) {
+                TopoDS_Shape imported;
+                BRep_Builder builder;
+                std::istringstream is(f.brep);
+                BRepTools::Read(imported, is, builder);
+                if (imported.IsNull())
+                    f.error = "Imported body is empty";
+                else
+                    body = body.IsNull() ? imported : BRepAlgoAPI_Fuse(body, imported).Shape();
             } else if (f.type == FeatureType::Fillet || f.type == FeatureType::Chamfer) {
                 if (body.IsNull()) {
                     f.error = "No body to modify";

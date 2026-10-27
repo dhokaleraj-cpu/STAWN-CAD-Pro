@@ -56,6 +56,8 @@ StawnMassProperties stawn_doc_mass_properties(StawnDoc* doc);
 StawnMesh* stawn_doc_mesh(StawnDoc* doc, double deflection);
 void stawn_mesh_free(StawnMesh* mesh);
 
+/* Adds a STEP file as an imported body. Returns 1 on success. */
+int stawn_doc_import_step(StawnDoc* doc, const char* path, char** error);
 int stawn_doc_export_step(StawnDoc* doc, const char* path);
 int stawn_doc_export_stl(StawnDoc* doc, const char* path);
 

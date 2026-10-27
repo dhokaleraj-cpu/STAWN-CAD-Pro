@@ -191,6 +191,17 @@ final class PartModel: ObservableObject {
 
     // MARK: - Output
 
+    func importSTEP(from url: URL) -> String? {
+        var error: UnsafeMutablePointer<CChar>?
+        guard stawn_doc_import_step(handle, url.path, &error) != 0 else {
+            let message = error.map { String(cString: $0) } ?? "Import failed"
+            stawn_free_string(error)
+            return message
+        }
+        rebuildAndNotify()
+        return nil
+    }
+
     func exportSTEP(to url: URL) -> Bool { stawn_doc_export_step(handle, url.path) != 0 }
     func exportSTL(to url: URL) -> Bool { stawn_doc_export_stl(handle, url.path) != 0 }
     func exportDrawing(to url: URL, paper: String, format: String) -> Bool {

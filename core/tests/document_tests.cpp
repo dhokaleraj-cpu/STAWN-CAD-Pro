@@ -152,3 +152,26 @@ TEST_CASE("STEP and STL export") {
     std::remove(step);
     std::remove(stl);
 }
+
+TEST_CASE("STEP import brings geometry into a new part and survives saving") {
+    auto doc = makeSampleShaft();
+    REQUIRE(doc->rebuild().ok);
+    double v = doc->massProperties().volume;
+    REQUIRE(doc->exportSTEP("roundtrip.step"));
+
+    PartDocument imported;
+    std::string err;
+    Feature* f = imported.importSTEP("roundtrip.step", &err);
+    REQUIRE_MESSAGE(f, err);
+    CHECK(f->name == "Imported1");
+    CHECK(f->sourceFile == "roundtrip.step");
+    REQUIRE(imported.rebuild().ok);
+    CHECK(imported.massProperties().volume == doctest::Approx(v).epsilon(1e-4));
+
+    auto copy = PartDocument::fromJSON(imported.toJSON(), &err);
+    REQUIRE(copy);
+    REQUIRE(copy->rebuild().ok);
+    CHECK(copy->massProperties().volume == doctest::Approx(v).epsilon(1e-4));
+    CHECK_FALSE(imported.importSTEP("missing.step", &err));
+    std::remove("roundtrip.step");
+}

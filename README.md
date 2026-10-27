@@ -11,7 +11,7 @@ feature-tree workflow: sketch, feature, configuration, custom properties, drawin
   distance, horizontal and vertical distance, length, radius, diameter and angle dimensions.
   Reports Under Defined, Fully Defined or Over Defined.
 - Features: extrude (boss and cut, mid plane, reverse), revolve (boss and cut), fillet,
-  chamfer. Profiles with inner loops become faces with holes.
+  chamfer, STEP import (geometry only). Profiles with inner loops become faces with holes.
 - Feature tree with rollback, suppression and rename that keeps references.
 - Configurations with suppressed features, configuration-specific dimensions and
   configuration-specific custom properties.
