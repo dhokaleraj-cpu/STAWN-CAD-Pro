@@ -3,3 +3,6 @@ build/
 *.xcodeproj/xcuserdata/
 .DS_Store
 DerivedData/
+build-windows/
+app-windows/**/bin/
+app-windows/**/obj/

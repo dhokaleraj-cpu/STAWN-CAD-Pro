@@ -1,0 +1,11 @@
+{
+  "name": "stawn-cad-pro",
+  "version": "0.1.0",
+  "description": "STAWN CAD Pro core: OpenCascade kernel, Eigen solver, JSON documents",
+  "dependencies": [
+    "opencascade",
+    "eigen3",
+    "nlohmann-json",
+    "doctest"
+  ]
+}

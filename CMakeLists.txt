@@ -31,7 +31,10 @@ add_library(stawn_core
     core/capi/stawn_c.cpp)
 target_include_directories(stawn_core PUBLIC core/include core/capi ${OpenCASCADE_INCLUDE_DIR})
 target_link_libraries(stawn_core PUBLIC ${STAWN_OCCT_LIBS} Eigen3::Eigen nlohmann_json::nlohmann_json)
-if(NOT MSVC)
+if(MSVC)
+    target_compile_options(stawn_core PRIVATE /utf-8 /bigobj /permissive-)
+    target_compile_definitions(stawn_core PUBLIC NOMINMAX _USE_MATH_DEFINES)
+else()
     target_compile_options(stawn_core PRIVATE -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -Wno-deprecated-declarations)
 endif()
 
@@ -39,6 +42,8 @@ endif()
 add_library(stawn SHARED core/capi/stawn_c.cpp)
 target_link_libraries(stawn PRIVATE stawn_core)
 set_target_properties(stawn PROPERTIES OUTPUT_NAME stawn)
+# The Windows app P/Invokes into stawn.dll, so its C functions must be exported.
+target_compile_definitions(stawn PRIVATE STAWN_BUILDING_DLL)
 
 add_executable(stawn-cli tools/stawn_cli.cpp)
 target_link_libraries(stawn-cli PRIVATE stawn_core)

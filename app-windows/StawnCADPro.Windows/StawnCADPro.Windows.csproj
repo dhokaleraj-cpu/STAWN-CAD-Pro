@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- STAWN CAD Pro for Windows 11: WinUI 3 interface over the same C++ core as the macOS app.
+       The core is built separately with CMake into stawn.dll (see app-windows/README.md). -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RootNamespace>Stawn</RootNamespace>
+    <AssemblyName>StawnCADPro</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <!-- Win2D 1.2 lists the old win10-* identifiers; the portable ones above avoid NETSDK1083. -->
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationIcon>Assets\StawnCADPro.ico</ApplicationIcon>
+    <Product>STAWN CAD Pro</Product>
+    <Version>0.1.0</Version>
+    <!-- Folder holding stawn.dll and the OpenCascade DLLs it needs. -->
+    <StawnNativeDir Condition="'$(StawnNativeDir)' == ''">$(MSBuildThisFileDirectory)..\..\build-windows\native</StawnNativeDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.5.240607001" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.3233" />
+    <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="$(StawnNativeDir)\*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\templates\*.stprp.json" Link="Templates\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

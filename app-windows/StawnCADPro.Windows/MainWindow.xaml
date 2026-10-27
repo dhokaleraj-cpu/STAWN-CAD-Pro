@@ -1,0 +1,121 @@
+<Window
+    x:Class="Stawn.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:views="using:Stawn.Views">
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />  <!-- title bar -->
+            <RowDefinition Height="Auto" />  <!-- menu -->
+            <RowDefinition Height="Auto" />  <!-- CommandManager -->
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />  <!-- status bar -->
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="TitleBar" Height="32" Padding="12,0,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Image Source="Assets/StawnCADPro.png" Width="16" Height="16" />
+                <TextBlock x:Name="TitleText" Text="STAWN CAD Pro" Style="{StaticResource CaptionTextBlockStyle}" />
+            </StackPanel>
+        </Grid>
+
+        <MenuBar Grid.Row="1">
+            <MenuBarItem Title="File">
+                <MenuFlyoutItem Text="New Part" Click="OnNew">
+                    <MenuFlyoutItem.KeyboardAccelerators><KeyboardAccelerator Modifiers="Control" Key="N" /></MenuFlyoutItem.KeyboardAccelerators>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem Text="Open…" Click="OnOpen">
+                    <MenuFlyoutItem.KeyboardAccelerators><KeyboardAccelerator Modifiers="Control" Key="O" /></MenuFlyoutItem.KeyboardAccelerators>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem Text="Open Sample Shaft" Click="OnSample" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem x:Name="SaveItem" Text="Save" Click="OnSave">
+                    <MenuFlyoutItem.KeyboardAccelerators><KeyboardAccelerator Modifiers="Control" Key="S" /></MenuFlyoutItem.KeyboardAccelerators>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem x:Name="SaveAsItem" Text="Save As…" Click="OnSaveAs" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem x:Name="ImportItem" Text="Import STEP…" Click="OnImportStep" />
+                <MenuFlyoutSubItem x:Name="ExportItem" Text="Export">
+                    <MenuFlyoutItem Text="STEP (*.step)…" Click="OnExportStep" />
+                    <MenuFlyoutItem Text="STL (*.stl)…" Click="OnExportStl" />
+                </MenuFlyoutSubItem>
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem Text="Exit" Click="OnExit" />
+            </MenuBarItem>
+            <MenuBarItem Title="View">
+                <!-- F is handled by the graphics area so it never fires while typing in a field -->
+                <MenuFlyoutItem Text="Zoom to Fit" Click="OnZoomToFit" KeyboardAcceleratorTextOverride="F" />
+                <MenuFlyoutSubItem x:Name="OrientationMenu" Text="Orientation" />
+                <MenuFlyoutSubItem x:Name="DisplayStyleMenu" Text="Display Style" />
+            </MenuBarItem>
+            <MenuBarItem Title="Tools">
+                <MenuFlyoutItem Text="Run Commands…" Click="OnRunCommands" />
+                <MenuFlyoutItem Text="Material…" Click="OnEditMaterial" />
+            </MenuBarItem>
+            <MenuBarItem Title="Help">
+                <MenuFlyoutItem Text="About STAWN CAD Pro" Click="OnAbout" />
+            </MenuBarItem>
+        </MenuBar>
+
+        <!-- CommandManager: tabs of tools, as in the Mac app -->
+        <TabView x:Name="CommandManager" Grid.Row="2" IsAddTabButtonVisible="False" TabWidthMode="SizeToContent"
+                 CanDragTabs="False" CanReorderTabs="False" Padding="0">
+            <TabViewItem Header="Features" IsClosable="False">
+                <CommandBar x:Name="FeaturesBar" DefaultLabelPosition="Bottom" HorizontalAlignment="Left" IsOpen="False" OverflowButtonVisibility="Collapsed" />
+            </TabViewItem>
+            <TabViewItem Header="Sketch" IsClosable="False">
+                <CommandBar x:Name="SketchBar" DefaultLabelPosition="Bottom" HorizontalAlignment="Left" OverflowButtonVisibility="Collapsed" />
+            </TabViewItem>
+            <TabViewItem Header="Evaluate" IsClosable="False">
+                <CommandBar x:Name="EvaluateBar" DefaultLabelPosition="Bottom" HorizontalAlignment="Left" OverflowButtonVisibility="Collapsed" />
+            </TabViewItem>
+            <TabViewItem Header="Drawing" IsClosable="False">
+                <CommandBar x:Name="DrawingBar" DefaultLabelPosition="Bottom" HorizontalAlignment="Left" OverflowButtonVisibility="Collapsed" />
+            </TabViewItem>
+        </TabView>
+
+        <Grid Grid.Row="3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="300" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition x:Name="TaskPaneColumn" Width="300" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Manager pane: FeatureManager tree, PropertyManager, ConfigurationManager -->
+            <Grid BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,1,0"
+                  Background="{ThemeResource LayerFillColorDefaultBrush}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <SelectorBar x:Name="ManagerTabs" SelectionChanged="OnManagerTabChanged">
+                    <SelectorBarItem x:Name="FeatureTab" Text="Features" IsSelected="True" ToolTipService.ToolTip="FeatureManager design tree" />
+                    <SelectorBarItem x:Name="PropertyTab" Text="Properties" ToolTipService.ToolTip="PropertyManager" />
+                    <SelectorBarItem x:Name="ConfigurationTab" Text="Configurations" ToolTipService.ToolTip="ConfigurationManager" />
+                </SelectorBar>
+                <views:FeatureTree x:Name="FeatureTreePanel" Grid.Row="1" />
+                <views:PropertyManagerPanel x:Name="PropertyPanel" Grid.Row="1" Visibility="Collapsed" />
+                <views:ConfigurationManagerPanel x:Name="ConfigurationPanel" Grid.Row="1" Visibility="Collapsed" />
+            </Grid>
+
+            <!-- Graphics area with the heads-up view toolbar -->
+            <Grid Grid.Column="1">
+                <views:Viewport x:Name="View3D" />
+                <Border HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,8,0,0" Padding="10,2"
+                        CornerRadius="16" Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}">
+                    <StackPanel x:Name="HeadsUp" Orientation="Horizontal" Spacing="2" />
+                </Border>
+                <views:WelcomePanel x:Name="Welcome" Visibility="Collapsed" />
+            </Grid>
+
+            <!-- Task pane: custom properties from a template -->
+            <views:CustomPropertiesPane x:Name="PropertiesPane" Grid.Column="2"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1,0,0,0" />
+        </Grid>
+
+        <Grid Grid.Row="4" Padding="10,3" Background="{ThemeResource LayerFillColorAltBrush}">
+            <TextBlock x:Name="StatusLeft" Style="{StaticResource CaptionTextBlockStyle}" />
+            <TextBlock x:Name="StatusRight" Style="{StaticResource CaptionTextBlockStyle}" HorizontalAlignment="Right" />
+        </Grid>
+    </Grid>
+</Window>

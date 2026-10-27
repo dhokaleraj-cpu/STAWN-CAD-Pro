@@ -1,7 +1,9 @@
 # STAWN CAD Pro
 
-A native macOS parametric CAD app for turned and machined parts, following the familiar
-feature-tree workflow: sketch, feature, configuration, custom properties, drawing.
+A native parametric CAD app for Windows 11 and macOS, for turned and machined parts,
+following the familiar feature-tree workflow: sketch, feature, configuration, custom
+properties, drawing. One C++ core drives a SwiftUI app on the Mac and a WinUI 3 app on
+Windows, and `.stprt` files open on both.
 
 ## What works today
 
@@ -37,6 +39,9 @@ feature-tree workflow: sketch, feature, configuration, custom properties, drawin
 - Heads-up view toolbar: zoom to fit, standard views, display styles.
 - Make Drawing with PDF preview and Save As PDF, DXF or SVG. Export STEP and STL.
 
+**Windows 11 app (WinUI 3, Win2D viewport)**: the same windows and panels as the Mac app over
+`stawn.dll`, plus Fillet/Chamfer dialogs and a Run Commands dialog. See `app-windows/README.md`.
+
 **Next**: interactive sketcher in the app, feature dialogs with edge picking, section and
 detail views, editable drawing dimensions and GD&T, assemblies. See `docs/PLAN.md`.
 
@@ -65,17 +70,28 @@ open StawnCADPro.xcodeproj   # then Run
 
 On an Intel Mac, change `HOMEBREW_PREFIX` in `project.yml` to `/usr/local`.
 
+## Build the Windows app
+
+In the Windows 11 VM (or any Windows 11 PC) with Visual Studio 2022, CMake and vcpkg:
+
+```powershell
+.\app-windows\build.ps1 -Run
+```
+
+Details in `app-windows/README.md`.
+
 ## Layout
 
 ```
 core/include/stawn   public C++ headers (Sketch, Document, Drawing, Mesh, Samples)
 core/src             C++ implementation
-core/capi            C interface used by Swift (stawn_c.h)
+core/capi            C interface used by Swift, C# and Python (stawn_c.h)
 core/tests           doctest unit tests
 tools/stawn_cli.cpp  command line tool
 tools/stawn_mcp      MCP server for Claude
 tools/solidworks_bridge  SolidWorks export for migration (Windows)
 app/StawnCADPro      SwiftUI macOS app
+app-windows          WinUI 3 Windows 11 app and build script
 templates            custom property templates (.stprp.json)
 examples             sample parts
 ```
