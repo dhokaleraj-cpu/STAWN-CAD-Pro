@@ -32,7 +32,8 @@ add_library(stawn_core
 target_include_directories(stawn_core PUBLIC core/include core/capi ${OpenCASCADE_INCLUDE_DIR})
 target_link_libraries(stawn_core PUBLIC ${STAWN_OCCT_LIBS} Eigen3::Eigen nlohmann_json::nlohmann_json)
 if(MSVC)
-    target_compile_options(stawn_core PRIVATE /utf-8 /bigobj /permissive-)
+    # PUBLIC so the tests and the CLI also read sources as UTF-8 (the Ø diameter sign).
+    target_compile_options(stawn_core PUBLIC /utf-8 /bigobj /permissive-)
     target_compile_definitions(stawn_core PUBLIC NOMINMAX _USE_MATH_DEFINES)
 else()
     target_compile_options(stawn_core PRIVATE -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -Wno-deprecated-declarations)
