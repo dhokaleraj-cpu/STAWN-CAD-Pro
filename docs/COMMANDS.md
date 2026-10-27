@@ -62,6 +62,9 @@ and reuse an existing point when a new end point lands on it, so consecutive lin
 | `draw_polygon` | Draw a regular polygon | `cx`: mm<br>`cy`: mm<br>`r`: circumradius mm<br>`rotation`: deg, optional<br>`sides`: 3 or more |
 | `add_relation` | Add a sketch relation | `a`: index<br>`b`: index<br>`kindA`: point|line|circle|arc<br>`kindB`: point|line|circle|arc<br>`type`: coincident, horizontal, vertical, parallel, perpendicular, equalLength, pointOnLine, midpoint, tangentLineArc, fix |
 | `add_dimension` | Add a driving sketch dimension | `a`: index<br>`b`: index<br>`kindA`: ...<br>`kindB`: ...<br>`type`: distance, horizontalDistance, verticalDistance, length, radius, diameter, angle<br>`value`: mm or deg |
+| `edit_sketch` | Open an existing sketch for editing; returns it as get_sketch does | `sketch`: sketch name |
+| `get_sketch` | A sketch's plane, geometry, relations, status and which points are defined | `sketch`: optional, default the active sketch |
+| `sketch_input` | Mouse and keyboard input for interactive sketching in the active sketch | `event`: tool, move, click, escape, delete, relation or dimension<br>`tool`: select, line, centerline, rectangle, circle, arc or dimension<br>`x`, `y`: mm<br>`tol`: snap distance mm<br>`add`: bool, add to selection<br>`index`: relation choice<br>`option`: dimension choice<br>`value`: dimension value |
 | `close_sketch` | Solve and close the active sketch | none |
 | `extrude` | Boss-extrude a sketch | `depth`: mm<br>`mid_plane`: bool<br>`reverse`: bool<br>`sketch`: optional, default last sketch |
 | `cut_extrude` | Cut-extrude a sketch | `depth`: mm<br>`mid_plane`: bool<br>`reverse`: bool<br>`sketch`: optional |

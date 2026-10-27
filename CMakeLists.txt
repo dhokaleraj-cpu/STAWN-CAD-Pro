@@ -21,6 +21,7 @@ endif()
 
 add_library(stawn_core
     core/src/Sketch.cpp
+    core/src/SketchEditor.cpp
     core/src/Document.cpp
     core/src/Serialization.cpp
     core/src/Mesh.cpp
@@ -55,6 +56,7 @@ if(BUILD_TESTING)
     add_executable(stawn_tests
         core/tests/main.cpp
         core/tests/sketch_tests.cpp
+        core/tests/sketch_editor_tests.cpp
         core/tests/document_tests.cpp
         core/tests/drawing_tests.cpp
         core/tests/capi_tests.cpp

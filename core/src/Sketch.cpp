@@ -388,6 +388,8 @@ SolveResult Sketch::solve(int maxIterations) {
         return result;
     }
     if (u.size == 0) {
+        result.pointDefined.assign(points.size(), true);
+        result.circleDefined.assign(circles.size(), true);
         result.status = r.size() > 0 ? SketchStatus::OverDefined : SketchStatus::FullyDefined;
         return result;
     }
@@ -396,6 +398,22 @@ SolveResult Sketch::solve(int maxIterations) {
     qr.setThreshold(1e-8);
     int rank = int(qr.rank());
     result.degreesOfFreedom = u.size - rank;
+
+    // An unknown is pinned when no direction the sketch can still move in changes it,
+    // i.e. its row of the Jacobian's null space is zero.
+    std::vector<bool> pinned(size_t(u.size), true);
+    if (result.degreesOfFreedom > 0) {
+        Eigen::FullPivLU<Eigen::MatrixXd> lu(J);
+        lu.setThreshold(1e-8);
+        Eigen::MatrixXd kernel = lu.kernel();
+        for (int j = 0; j < u.size; ++j) pinned[size_t(j)] = kernel.row(j).norm() < 1e-6;
+    }
+    result.pointDefined.assign(points.size(), true);
+    for (size_t i = 0; i < points.size(); ++i)
+        if (u.pointIndex[i] >= 0)
+            result.pointDefined[i] = pinned[size_t(u.pointIndex[i])] && pinned[size_t(u.pointIndex[i] + 1)];
+    result.circleDefined.assign(circles.size(), true);
+    for (size_t i = 0; i < circles.size(); ++i) result.circleDefined[i] = pinned[size_t(u.circleIndex[i])];
     if (rank < r.size())
         result.status = SketchStatus::OverDefined;  // redundant relations
     else if (result.degreesOfFreedom > 0)
@@ -403,6 +421,97 @@ SolveResult Sketch::solve(int maxIterations) {
     else
         result.status = SketchStatus::FullyDefined;
     return result;
+}
+
+std::pair<RefKind, RefKind> referenceKinds(const SketchConstraint& c) {
+    using T = ConstraintType;
+    switch (c.type) {
+        case T::Coincident:
+        case T::Distance:
+        case T::HorizontalDistance:
+        case T::VerticalDistance: return {RefKind::Point, RefKind::Point};
+        case T::Horizontal:
+        case T::Vertical:
+        case T::Length: return {RefKind::Line, RefKind::Point};
+        case T::Parallel:
+        case T::Perpendicular:
+        case T::EqualLength:
+        case T::Angle: return {RefKind::Line, RefKind::Line};
+        case T::PointOnLine:
+        case T::Midpoint: return {RefKind::Point, RefKind::Line};
+        case T::PointOnCircle: return {RefKind::Point, c.refKindB};
+        case T::TangentLineArc: return {RefKind::Line, c.refKindB};
+        case T::Fix: return {RefKind::Point, RefKind::Point};
+        case T::Radius:
+        case T::Diameter: return {c.refKindA, RefKind::Point};
+    }
+    return {RefKind::Point, RefKind::Point};
+}
+
+namespace {
+
+bool usesSlotB(ConstraintType t) {
+    using T = ConstraintType;
+    return !(t == T::Horizontal || t == T::Vertical || t == T::Length || t == T::Fix || t == T::Radius ||
+             t == T::Diameter);
+}
+
+// Drops the constraints that refer to entity `index` of `kind` and shifts later indices.
+void dropReferences(std::vector<SketchConstraint>& cs, RefKind kind, int index) {
+    std::vector<SketchConstraint> kept;
+    for (auto c : cs) {
+        auto [ka, kb] = referenceKinds(c);
+        bool b = usesSlotB(c.type);
+        if ((ka == kind && c.a == index) || (b && kb == kind && c.b == index)) continue;
+        if (ka == kind && c.a > index) --c.a;
+        if (b && kb == kind && c.b > index) --c.b;
+        kept.push_back(c);
+    }
+    cs = std::move(kept);
+}
+
+}  // namespace
+
+void Sketch::removeLine(int i) {
+    if (i < 0 || i >= int(lines.size())) return;
+    lines.erase(lines.begin() + i);
+    dropReferences(constraints, RefKind::Line, i);
+    removeUnusedPoints();
+}
+
+void Sketch::removeCircle(int i) {
+    if (i < 0 || i >= int(circles.size())) return;
+    circles.erase(circles.begin() + i);
+    dropReferences(constraints, RefKind::Circle, i);
+    removeUnusedPoints();
+}
+
+void Sketch::removeArc(int i) {
+    if (i < 0 || i >= int(arcs.size())) return;
+    arcs.erase(arcs.begin() + i);
+    dropReferences(constraints, RefKind::Arc, i);
+    removeUnusedPoints();
+}
+
+void Sketch::removeConstraint(int i) {
+    if (i >= 0 && i < int(constraints.size())) constraints.erase(constraints.begin() + i);
+}
+
+void Sketch::removeUnusedPoints() {
+    std::vector<bool> used(points.size(), false);
+    if (!used.empty()) used[0] = true;  // the origin
+    for (auto& l : lines) used[size_t(l.p1)] = used[size_t(l.p2)] = true;
+    for (auto& c : circles) used[size_t(c.center)] = true;
+    for (auto& a : arcs) used[size_t(a.center)] = used[size_t(a.start)] = used[size_t(a.end)] = true;
+    for (int i = int(points.size()) - 1; i >= 0; --i) {
+        if (used[size_t(i)]) continue;
+        points.erase(points.begin() + i);
+        dropReferences(constraints, RefKind::Point, i);
+        auto shift = [i](int& p) { if (p > i) --p; };
+        for (auto& l : lines) { shift(l.p1); shift(l.p2); }
+        for (auto& c : circles) shift(c.center);
+        for (auto& a : arcs) { shift(a.center); shift(a.start); shift(a.end); }
+    }
 }
 
 }  // namespace stawn

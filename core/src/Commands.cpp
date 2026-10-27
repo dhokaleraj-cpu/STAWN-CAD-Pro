@@ -9,11 +9,13 @@
 #include <TopoDS.hxx>
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
+#include <gp_Ax3.hxx>
 
 #include <cmath>
 #include <stdexcept>
 
 #include "stawn/Drawing.hpp"
+#include "stawn/Json.hpp"
 
 using nlohmann::json;
 
@@ -43,6 +45,9 @@ const OpInfo kOps[] = {
     {"draw_polygon", "Draw a regular polygon", R"J({"cx":"mm","cy":"mm","r":"circumradius mm","sides":"3 or more","rotation":"deg, optional"})J"},
     {"add_relation", "Add a sketch relation", R"J({"type":"coincident, horizontal, vertical, parallel, perpendicular, equalLength, pointOnLine, midpoint, tangentLineArc, fix","a":"index","b":"index","kindA":"point|line|circle|arc","kindB":"point|line|circle|arc"})J"},
     {"add_dimension", "Add a driving sketch dimension", R"J({"type":"distance, horizontalDistance, verticalDistance, length, radius, diameter, angle","a":"index","b":"index","value":"mm or deg","kindA":"...","kindB":"..."})J"},
+    {"edit_sketch", "Open an existing sketch for editing; returns it as get_sketch does", R"J({"sketch":"sketch name"})J"},
+    {"get_sketch", "A sketch's plane, geometry, relations, status and which points are defined", R"J({"sketch":"optional, default the active sketch"})J"},
+    {"sketch_input", "Mouse and keyboard input for interactive sketching in the active sketch", R"J({"event":"tool, move, click, escape, delete, relation or dimension","tool":"select, line, centerline, rectangle, circle, arc or dimension","x":"mm","y":"mm","tol":"snap distance mm","add":"bool, add to selection","index":"relation choice","option":"dimension choice","value":"dimension value"})J"},
     {"close_sketch", "Solve and close the active sketch", R"J({})J"},
     {"extrude", "Boss-extrude a sketch", R"J({"depth":"mm","sketch":"optional, default last sketch","mid_plane":"bool","reverse":"bool"})J"},
     {"cut_extrude", "Cut-extrude a sketch", R"J({"depth":"mm","sketch":"optional","mid_plane":"bool","reverse":"bool"})J"},
@@ -123,6 +128,24 @@ std::vector<EdgeRef> selectEdges(PartDocument& doc, const json& sel) {
     }
     if (refs.empty()) throw std::runtime_error("no edges match '" + mode + "'");
     return refs;
+}
+
+// What a sketch editor draws: the plane and its axes in model space, the geometry, and which
+// points are defined (drawn black) or can still move (blue).
+json sketchState(const Feature& f) {
+    Sketch s = f.sketch;
+    SolveResult sr = s.solve();
+    gp_Ax3 ax = planeAxes(f.plane);
+    auto vec = [](const gp_Dir& d) { return json::array({d.X(), d.Y(), d.Z()}); };
+    json r = {{"sketch", f.name}, {"plane", toString(f.plane)},
+              {"axes", {{"origin", json::array({ax.Location().X(), ax.Location().Y(), ax.Location().Z()})},
+                        {"x", vec(ax.XDirection())}, {"y", vec(ax.YDirection())}, {"normal", vec(ax.Direction())}}},
+              {"geometry", sketchToJson(s)}, {"status", toString(sr.status)}, {"degrees_of_freedom", sr.degreesOfFreedom}};
+    json points = json::array(), circles = json::array();
+    for (bool d : sr.pointDefined) points.push_back(d);
+    for (bool d : sr.circleDefined) circles.push_back(d);
+    r["defined"] = {{"points", points}, {"circles", circles}};
+    return r;
 }
 
 json featureList(PartDocument& doc) {
@@ -212,7 +235,21 @@ json CommandSession::execute(const json& c) {
             if (!plane) throw std::runtime_error("plane must be Front, Top or Right");
             Feature& f = doc.addSketch(*plane, c.value("name", ""));
             activeSketch_ = lastSketch_ = f.name;
+            editor_.reset();
             r["sketch"] = f.name;
+        } else if (op == "edit_sketch" || op == "get_sketch") {
+            std::string name = op == "edit_sketch" ? str(c, "sketch") : c.value("sketch", activeSketch_.empty() ? lastSketch_ : activeSketch_);
+            Feature* f = doc.feature(name);
+            if (!f || f->type != FeatureType::Sketch) throw std::runtime_error("no sketch named '" + name + "'");
+            if (op == "edit_sketch") {
+                activeSketch_ = lastSketch_ = f->name;
+                editor_.reset();
+            }
+            r = sketchState(*f);
+            r["ok"] = true;
+        } else if (op == "sketch_input") {
+            json out = editor_.input(activeSketch(), c);
+            for (auto& [k, v] : out.items()) r[k] = v;
         } else if (op == "draw_line" || op == "draw_centerline") {
             Sketch& s = activeSketch();
             int a = pointAt(num(c, "x1"), num(c, "y1")), b = pointAt(num(c, "x2"), num(c, "y2"));
@@ -280,6 +317,7 @@ json CommandSession::execute(const json& c) {
             r["status"] = toString(sr.status);
             r["degrees_of_freedom"] = sr.degreesOfFreedom;
             activeSketch_.clear();
+            editor_.reset();
         } else if (op == "extrude" || op == "cut_extrude" || op == "revolve" || op == "cut_revolve") {
             std::string sk = c.value("sketch", activeSketch_.empty() ? lastSketch_ : activeSketch_);
             Feature* skf = doc.feature(sk);

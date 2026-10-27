@@ -115,3 +115,37 @@ TEST_CASE("C interface: execute commands and save") {
     stawn_free_string(out);
     stawn_doc_free(d);
 }
+
+TEST_CASE("sketching with the mouse through the command API, then extruding") {
+    CommandSession cs;
+    json r = cs.execute({{"op", "create_sketch"}, {"plane", "Top"}});
+    REQUIRE(r["ok"] == true);
+    cs.execute({{"op", "sketch_input"}, {"event", "tool"}, {"tool", "circle"}});
+    cs.execute({{"op", "sketch_input"}, {"event", "click"}, {"x", 0}, {"y", 0}, {"tol", 0.5}});
+    r = cs.execute({{"op", "sketch_input"}, {"event", "click"}, {"x", 12}, {"y", 0}, {"tol", 0.5}});
+    CHECK(r["changed"] == true);
+    CHECK(r["degrees_of_freedom"] == 1);
+
+    r = cs.execute({{"op", "get_sketch"}});
+    CHECK(r["plane"].get<std::string>() == "Top");
+    CHECK(r["axes"]["normal"][1].get<double>() == doctest::Approx(1).epsilon(1e-9));
+    CHECK(r["defined"]["points"][0] == true);   // the origin, and the centre coincides with it
+    CHECK(r["defined"]["circles"][0] == false);  // radius still free
+
+    cs.execute({{"op", "sketch_input"}, {"event", "tool"}, {"tool", "dimension"}});
+    cs.execute({{"op", "sketch_input"}, {"event", "click"}, {"x", 0}, {"y", 12}, {"tol", 0.5}});
+    r = cs.execute({{"op", "sketch_input"}, {"event", "dimension"}, {"value", 30}});
+    CHECK(r["status"].get<std::string>() == "Fully Defined");
+    r = cs.execute({{"op", "get_sketch"}});
+    CHECK(r["defined"]["circles"][0] == true);
+
+    cs.execute({{"op", "close_sketch"}});
+    r = cs.execute({{"op", "extrude"}, {"depth", 10}});
+    REQUIRE(r["ok"] == true);
+    r = cs.execute({{"op", "mass_properties"}});
+    CHECK(r["volume_mm3"].get<double>() == doctest::Approx(3.14159265 * 15 * 15 * 10).epsilon(1e-3));
+
+    r = cs.execute({{"op", "edit_sketch"}, {"sketch", "Sketch1"}});
+    CHECK(r["ok"] == true);
+    CHECK(r["geometry"]["circles"].size() == 1);
+}

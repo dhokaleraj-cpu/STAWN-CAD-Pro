@@ -15,6 +15,7 @@
 #include <string>
 
 #include "stawn/Document.hpp"
+#include "stawn/SketchEditor.hpp"
 
 namespace stawn {
 
@@ -43,6 +44,7 @@ private:
     std::unique_ptr<PartDocument>* slot_;
     std::string activeSketch_;
     std::string lastSketch_;
+    SketchEditor editor_;  // mouse-driven sketching in the active sketch (sketch_input)
 };
 
 }  // namespace stawn

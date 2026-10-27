@@ -4,6 +4,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace stawn {
@@ -79,7 +80,14 @@ struct SolveResult {
     int degreesOfFreedom = 0;
     double residual = 0;
     int iterations = 0;
+    // Which geometry the relations and dimensions pin down, for colouring the sketch:
+    // defined geometry is drawn black, geometry that can still move blue.
+    std::vector<bool> pointDefined;
+    std::vector<bool> circleDefined;  // the radius (the centre is its own point)
 };
+
+// Which kind of geometry a relation's a and b refer to; Point for unused slots.
+std::pair<RefKind, RefKind> referenceKinds(const SketchConstraint& c);
 
 class Sketch {
 public:
@@ -104,6 +112,14 @@ public:
     std::optional<double> dimension(const std::string& name) const;
 
     SolveResult solve(int maxIterations = 200);
+
+    // Removing geometry also removes the relations and dimensions on it, and points no
+    // longer used by any entity (except the origin). Later indices shift down.
+    void removeLine(int i);
+    void removeCircle(int i);
+    void removeArc(int i);
+    void removeConstraint(int i);
+    void removeUnusedPoints();
 
     std::vector<SketchPoint> points;
     std::vector<SketchLine> lines;
