@@ -38,7 +38,12 @@ Copy-Item (Join-Path $build "$Configuration\*.dll") $native -Force
 
 $project = Join-Path $PSScriptRoot "StawnCADPro.Windows\StawnCADPro.Windows.csproj"
 $out = Join-Path $build "app"
-dotnet publish $project -c $Configuration -r $rid -p:Platform=$Arch "-p:StawnNativeDir=$native" -o $out
+# WinUI needs Visual Studio's MSBuild: the dotnet CLI lacks the PRI resource tasks.
+$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+$msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
+if (-not $msbuild) { throw "MSBuild from Visual Studio 2022 was not found." }
+& $msbuild $project -restore -t:Publish -v:minimal "-p:Configuration=$Configuration" "-p:Platform=$Arch" `
+    "-p:RuntimeIdentifier=$rid" "-p:StawnNativeDir=$native" "-p:PublishDir=$out\"
 if ($LASTEXITCODE) { throw "App build failed" }
 Write-Host "Built $out\StawnCADPro.exe"
 if ($Run) { Start-Process (Join-Path $out "StawnCADPro.exe") }
