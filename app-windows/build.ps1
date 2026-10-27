@@ -36,14 +36,23 @@ $native = Join-Path $build "native"
 New-Item -ItemType Directory -Force $native | Out-Null
 Copy-Item (Join-Path $build "$Configuration\*.dll") $native -Force
 
+# The core and OpenCascade use the Visual C++ runtime DLLs. Ship them next to the app
+# (app-local deployment) so it runs on PCs without the VC++ Redistributable, which Windows on
+# ARM in Parallels usually lacks.
+$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+$vs = & $vswhere -latest -products * -property installationPath
+$crt = Get-ChildItem "$vs\VC\Redist\MSVC\*\$($Arch.ToLower())\Microsoft.VC14*.CRT" -Directory |
+    Sort-Object FullName -Descending | Select-Object -First 1
+if (-not $crt) { throw "The Visual C++ runtime for $Arch was not found under $vs\VC\Redist." }
+Copy-Item "$($crt.FullName)\*.dll" $native -Force
+
 $project = Join-Path $PSScriptRoot "StawnCADPro.Windows\StawnCADPro.Windows.csproj"
 $out = Join-Path $build "app"
 # WinUI needs Visual Studio's MSBuild: the dotnet CLI lacks the PRI resource tasks.
-$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
 if (-not $msbuild) { throw "MSBuild from Visual Studio 2022 was not found." }
 & $msbuild $project -restore -t:Publish -v:minimal "-p:Configuration=$Configuration" "-p:Platform=$Arch" `
-    "-p:RuntimeIdentifier=$rid" "-p:StawnNativeDir=$native" "-p:PublishDir=$out\"
+    "-p:RuntimeIdentifier=$rid" -p:SelfContained=true "-p:StawnNativeDir=$native" "-p:PublishDir=$out\"
 if ($LASTEXITCODE) { throw "App build failed" }
 Write-Host "Built $out\StawnCADPro.exe"
 if ($Run) { Start-Process (Join-Path $out "StawnCADPro.exe") }

@@ -45,6 +45,19 @@ jobs:
           path: vcpkg-cache
           key: vcpkg-${{ matrix.arch }}-${{ hashFiles('vcpkg.json') }}
 
+      # The x64 runner can start the x64 app: check it opens a window and keeps running.
+      - name: Check the app starts
+        if: matrix.arch == 'x64'
+        shell: pwsh
+        run: |
+          $p = Start-Process build-windows\app\StawnCADPro.exe -PassThru
+          Start-Sleep -Seconds 20
+          $log = "$env:LOCALAPPDATA\STAWN CAD Pro\crash.log"
+          if (Test-Path $log) { Get-Content $log }
+          if ($p.HasExited) { throw "StawnCADPro.exe exited during startup with code $($p.ExitCode)" }
+          Stop-Process $p
+          Write-Host "StawnCADPro.exe was still running after 20 s"
+
       - uses: actions/upload-artifact@v4
         with:
           name: StawnCADPro-windows-${{ matrix.arch }}
